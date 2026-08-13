@@ -453,7 +453,7 @@ impl MusicianPersona {
                     evolved.fail_count = 0;
                     // Mutate slightly — shift the embedding
                     for v in evolved.embedding.0.iter_mut() {
-                        *v += (rand_simple(*v) * 0.1);
+                        *v += rand_simple(*v) * 0.1;
                     }
                     self.vector_db.ingest(evolved);
                 }
@@ -891,5 +891,142 @@ mod tests {
         assert!(miles_ref.jam_count >= 10);
         // The persona has played, learned, and evolved
         assert!(miles_ref.total_notes_played > 0);
+    }
+
+    // ── Edge-case tests ───────────────────────────────────────────
+
+    #[test] fn empty_phrase_embedding() {
+        let p = Phrase { events: vec![], source: "empty".into(), instrument: "silence".into() };
+        let e = MusicEmbedding::from_phrase(&p);
+        assert_eq!(e.0, [0.0f32; 32]);
+        assert_eq!(e.identity_strength(), 0.0);
+    }
+
+    #[test] fn single_note_phrase() {
+        let p = Phrase {
+            events: vec![make_note(60, 80, 480, 0)],
+            source: "single".into(), instrument: "piano".into(),
+        };
+        let e = MusicEmbedding::from_phrase(&p);
+        // No intervals → dims 2-5 stay 0
+        assert_eq!(e.0[2], 0.0);
+        assert_eq!(e.0[3], 0.0);
+        // But register should be set
+        assert!(e.0[0] > 0.0);
+    }
+
+    #[test] fn zero_embedding_similarity_to_anything_is_zero() {
+        let zero = MusicEmbedding::zero();
+        let p = miles_phrase();
+        let real = MusicEmbedding::from_phrase(&p);
+        assert_eq!(zero.similarity(&real), 0.0);
+        assert_eq!(real.similarity(&zero), 0.0);
+    }
+
+    #[test] fn pattern_confidence_all_failures() {
+        let mut p = Pattern::new(MusicEmbedding::zero(), "doomed");
+        for _ in 0..10 { p.penalize(); }
+        assert_eq!(p.confidence(), 0.0);
+    }
+
+    #[test] fn pattern_confidence_all_successes() {
+        let mut p = Pattern::new(MusicEmbedding::zero(), "golden");
+        for _ in 0..10 { p.reinforce(); }
+        assert_eq!(p.confidence(), 1.0);
+    }
+
+    #[test] fn vector_db_eviction_removes_weakest() {
+        let mut db = PatternVectorDB::new(3);
+        // Add 3 patterns with varying confidence
+        let mut strong = Pattern::new(MusicEmbedding::from_phrase(&miles_phrase()), "strong");
+        strong.success_count = 10;
+        db.ingest(strong);
+
+        let mut medium = Pattern::new(MusicEmbedding::from_phrase(&coltrane_phrase()), "medium");
+        medium.success_count = 3;
+        db.ingest(medium);
+
+        let mut weak = Pattern::new(MusicEmbedding::from_phrase(&monk_phrase()), "weak");
+        weak.fail_count = 5;
+        db.ingest(weak);
+
+        assert_eq!(db.patterns.len(), 3);
+
+        // Adding a 4th should evict the weakest (most failures)
+        db.ingest(Pattern::new(MusicEmbedding::zero(), "new"));
+        assert_eq!(db.patterns.len(), 3);
+        // The weak one should be gone
+        assert!(db.patterns.iter().all(|p| p.source_phrase != "weak"));
+    }
+
+    #[test] fn vector_db_empty_soul_print() {
+        let db = PatternVectorDB::new(100);
+        let soul = db.soul_print();
+        assert_eq!(soul.identity_strength(), 0.0);
+    }
+
+    #[test] fn split_phrases_empty_input() {
+        let phrases = split_phrases(&[], "piano", "silence");
+        assert!(phrases.is_empty());
+    }
+
+    #[test] fn split_phrases_single_phrase_no_rests() {
+        let events = vec![
+            make_note(60, 80, 240, 0),
+            make_note(62, 80, 240, 0),
+            make_note(64, 80, 240, 0),
+        ];
+        let phrases = split_phrases(&events, "piano", "flow");
+        assert_eq!(phrases.len(), 1);
+        assert_eq!(phrases[0].events.len(), 3);
+    }
+
+    #[test] fn duration_helpers() {
+        assert!(Duration(480).is_long());
+        assert!(!Duration(240).is_long());
+        assert!(Duration(240).is_short());
+        assert!(!Duration(480).is_short());
+        assert!((Duration(960).quarter_notes() - 2.0).abs() < 0.01);
+    }
+
+    #[test] fn pitch_octave_and_class() {
+        assert_eq!(Pitch(60).octave(), 4); // C4
+        assert_eq!(Pitch(60).note_class(), 0); // C
+        assert_eq!(Pitch(69).note_class(), 9); // A
+        assert_eq!(Pitch(72).octave(), 5); // C5
+    }
+
+    #[test] fn parse_midi_events_roundtrip() {
+        let raw = vec![(60, 80, 240, 0), (62, 90, 480, 120)];
+        let events = parse_midi_events(&raw);
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].pitch.0, 60);
+        assert_eq!(events[1].velocity.0, 90);
+    }
+
+    #[test] fn embedding_identity_strength_positive() {
+        let p = coltrane_phrase();
+        let e = MusicEmbedding::from_phrase(&p);
+        // Coltrane's dense phrase should have a strong identity
+        assert!(e.identity_strength() > 0.0);
+    }
+
+    #[test] fn jam_session_single_persona() {
+        let mut miles = MusicianPersona::new("Miles", "trumpet");
+        for i in 0..5 {
+            let mut p = miles_phrase(); p.source = format!("m{}", i);
+            miles.digest_phrase(&p, "Miles Davis");
+        }
+        let mut jam = JamSession::new(vec![miles], "solo");
+        let round = jam.round(&miles_phrase());
+        assert_eq!(round.responses.len(), 1);
+        // Solo jam harmony defaults to 0.5
+        assert!((round.harmony_score - 0.5).abs() < 0.01);
+    }
+
+    #[test] fn persona_no_influences_has_zero_identity() {
+        let persona = MusicianPersona::new("Empty", "silence");
+        let id = persona.identity();
+        assert_eq!(id.identity_strength(), 0.0);
     }
 }
