@@ -2,3 +2,6 @@ target/
 .env
 credentials.*
 *.secret
+
+__pycache__/
+*.pyc
