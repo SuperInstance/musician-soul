@@ -29,6 +29,38 @@
 //! A persona doesn't copy. It *digests*. Miles Davis's vector DB doesn't
 //! contain his solos — it contains the *shapes* of his decisions. The gaps
 //! he left. The way he responded to what someone else played. That's the soul.
+//!
+//! ## Quickstart
+//!
+//! ```
+//! use musician_soul::*;
+//!
+//! // A persona with weighted influences.
+//! let mut miles = MusicianPersona::new("Miles", "trumpet");
+//! miles.add_influence("Miles Davis", 1.0);
+//!
+//! // Digest a phrase (stands in for a MIDI import).
+//! let phrase = Phrase {
+//!     events: vec![
+//!         NoteEvent { pitch: Pitch(62), velocity: Velocity(80), duration: Duration(480), tick_offset: 0 },
+//!         NoteEvent { pitch: Pitch(65), velocity: Velocity(70), duration: Duration(240), tick_offset: 240 },
+//!         NoteEvent { pitch: Pitch(67), velocity: Velocity(90), duration: Duration(960), tick_offset: 120 },
+//!     ],
+//!     source: "miles_chorus3".into(),
+//!     instrument: "trumpet".into(),
+//! };
+//! miles.digest_phrase(&phrase, "Miles Davis");
+//!
+//! // Jam, and read back how much soul has emerged.
+//! let mut jam = JamSession::new(vec![miles], "late_night_session");
+//! let round = jam.round(&phrase);
+//! assert_eq!(round.responses.len(), 1);
+//! for (name, soul_pct) in jam.soul_report() {
+//!     println!("{name}: {soul_pct:.1}% own");
+//! }
+//! ```
+//!
+//! For a full narrated tour, run `cargo run --example jam`.
 
 #![forbid(unsafe_code)]
 
@@ -41,10 +73,18 @@ use std::collections::HashMap;
 pub struct Pitch(pub u8);
 
 impl Pitch {
-    pub fn midi_note(&self) -> u8 { self.0 }
-    pub fn octave(&self) -> i8 { (self.0 as i8 / 12) - 1 }
-    pub fn note_class(&self) -> u8 { self.0 % 12 } // C=0, C#=1, ..., B=11
-    pub fn frequency_hz(&self) -> f64 { 440.0 * 2.0_f64.powf((self.0 as f64 - 69.0) / 12.0) }
+    pub fn midi_note(&self) -> u8 {
+        self.0
+    }
+    pub fn octave(&self) -> i8 {
+        (self.0 as i8 / 12) - 1
+    }
+    pub fn note_class(&self) -> u8 {
+        self.0 % 12
+    } // C=0, C#=1, ..., B=11
+    pub fn frequency_hz(&self) -> f64 {
+        440.0 * 2.0_f64.powf((self.0 as f64 - 69.0) / 12.0)
+    }
 }
 
 /// Velocity (0-127).
@@ -52,7 +92,9 @@ impl Pitch {
 pub struct Velocity(pub u8);
 
 impl Velocity {
-    pub fn as_f32(&self) -> f32 { self.0 as f32 / 127.0 }
+    pub fn as_f32(&self) -> f32 {
+        self.0 as f32 / 127.0
+    }
     pub fn dynamic_mark(&self) -> &'static str {
         match self.0 {
             0..=31 => "pp",
@@ -70,11 +112,17 @@ pub struct Duration(pub u32);
 
 impl Duration {
     /// How many quarter notes this duration spans.
-    pub fn quarter_notes(&self) -> f32 { self.0 as f32 / 480.0 }
+    pub fn quarter_notes(&self) -> f32 {
+        self.0 as f32 / 480.0
+    }
     /// True if this is a "long" note (>= quarter note).
-    pub fn is_long(&self) -> bool { self.0 >= 480 }
+    pub fn is_long(&self) -> bool {
+        self.0 >= 480
+    }
     /// True if this is a "short" note (<= eighth note).
-    pub fn is_short(&self) -> bool { self.0 <= 240 }
+    pub fn is_short(&self) -> bool {
+        self.0 <= 240
+    }
 }
 
 /// A single MIDI note event.
@@ -90,14 +138,15 @@ pub struct NoteEvent {
 #[derive(Debug, Clone)]
 pub struct Phrase {
     pub events: Vec<NoteEvent>,
-    pub source: String,       // e.g. "milesttes2_chorus3"
-    pub instrument: String,   // e.g. "trumpet"
+    pub source: String,     // where it came from, e.g. "miles_chorus3"
+    pub instrument: String, // e.g. "trumpet"
 }
 
 impl Phrase {
     /// Extract the pitch contour as interval sequence.
     pub fn intervals(&self) -> Vec<i8> {
-        self.events.windows(2)
+        self.events
+            .windows(2)
             .map(|w| w[1].pitch.0 as i8 - w[0].pitch.0 as i8)
             .collect()
     }
@@ -105,8 +154,13 @@ impl Phrase {
     /// Extract rhythm pattern as duration ratios.
     pub fn rhythm_pattern(&self) -> Vec<f32> {
         let total: f32 = self.events.iter().map(|e| e.duration.0 as f32).sum();
-        if total == 0.0 { return vec![]; }
-        self.events.iter().map(|e| e.duration.0 as f32 / total).collect()
+        if total == 0.0 {
+            return vec![];
+        }
+        self.events
+            .iter()
+            .map(|e| e.duration.0 as f32 / total)
+            .collect()
     }
 
     /// Extract velocity contour (dynamics shape).
@@ -125,13 +179,19 @@ impl Phrase {
     pub fn rest_ratio(&self) -> f32 {
         let total_ticks: u32 = self.events.iter().map(|e| e.tick_offset).sum();
         let note_ticks: u32 = self.events.iter().map(|e| e.duration.0).sum();
-        if total_ticks + note_ticks == 0 { return 0.0; }
+        if total_ticks + note_ticks == 0 {
+            return 0.0;
+        }
         1.0 - (note_ticks as f32 / (total_ticks + note_ticks) as f32)
     }
 
     /// Number of notes.
-    pub fn len(&self) -> usize { self.events.len() }
-    pub fn is_empty(&self) -> bool { self.events.is_empty() }
+    pub fn len(&self) -> usize {
+        self.events.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.events.is_empty()
+    }
 }
 
 // ── Vector Embeddings ─────────────────────────────────────────────
@@ -143,12 +203,16 @@ impl Phrase {
 pub struct MusicEmbedding(pub [f32; 32]);
 
 impl MusicEmbedding {
-    pub fn zero() -> Self { Self([0.0; 32]) }
+    pub fn zero() -> Self {
+        Self([0.0; 32])
+    }
 
     /// Create embedding from a phrase — the "DNA" of a musical moment.
     pub fn from_phrase(phrase: &Phrase) -> Self {
         let mut v = [0.0f32; 32];
-        if phrase.events.is_empty() { return Self(v); }
+        if phrase.events.is_empty() {
+            return Self(v);
+        }
 
         // Dimensions 0-3: register statistics
         let pitches: Vec<u8> = phrase.events.iter().map(|e| e.pitch.0).collect();
@@ -159,7 +223,8 @@ impl MusicEmbedding {
         // Dimensions 2-5: interval statistics
         let intervals = phrase.intervals();
         if !intervals.is_empty() {
-            let mean_interval = intervals.iter().map(|&i| i.abs() as f32).sum::<f32>() / intervals.len() as f32;
+            let mean_interval =
+                intervals.iter().map(|&i| i.abs() as f32).sum::<f32>() / intervals.len() as f32;
             v[2] = mean_interval / 12.0; // average leap size
             let up_count = intervals.iter().filter(|&&i| i > 0).count();
             v[3] = up_count as f32 / intervals.len() as f32; // directional bias (up vs down)
@@ -170,15 +235,24 @@ impl MusicEmbedding {
         // Dimensions 5-9: rhythm statistics
         let rhythm = phrase.rhythm_pattern();
         if !rhythm.is_empty() {
-            let short_count = phrase.events.iter().filter(|e| e.duration.is_short()).count();
+            let short_count = phrase
+                .events
+                .iter()
+                .filter(|e| e.duration.is_short())
+                .count();
             v[5] = short_count as f32 / phrase.events.len() as f32; // rhythmic density
             v[6] = phrase.rest_ratio(); // space vs notes (the gaps Miles loved)
-            // Rhythmic variance — how varied are the durations
+                                        // Rhythmic variance — how varied are the durations
             let mean_r = rhythm.iter().sum::<f32>() / rhythm.len() as f32;
-            let var_r = rhythm.iter().map(|r| (r - mean_r).powi(2)).sum::<f32>() / rhythm.len() as f32;
+            let var_r =
+                rhythm.iter().map(|r| (r - mean_r).powi(2)).sum::<f32>() / rhythm.len() as f32;
             v[7] = var_r * 100.0; // rhythmic variety
-            // Syncopation proxy: ratio of off-beat starts
-            let off_beat = phrase.events.iter().filter(|e| e.tick_offset % 480 > 120).count();
+                                  // Syncopation proxy: ratio of off-beat starts
+            let off_beat = phrase
+                .events
+                .iter()
+                .filter(|e| e.tick_offset % 480 > 120)
+                .count();
             v[8] = off_beat as f32 / phrase.events.len().max(1) as f32;
         }
 
@@ -186,11 +260,11 @@ impl MusicEmbedding {
         let vel = phrase.velocity_contour();
         if !vel.is_empty() {
             v[9] = vel.iter().sum::<f32>() / vel.len() as f32; // average loudness
-            // Dynamic range
+                                                               // Dynamic range
             let max_v = vel.iter().cloned().fold(0.0f32, f32::max);
             let min_v = vel.iter().cloned().fold(1.0f32, f32::min);
             v[10] = max_v - min_v; // dynamic range
-            // Crescendo/decrescendo tendency
+                                   // Crescendo/decrescendo tendency
             if vel.len() >= 2 {
                 v[11] = vel.last().unwrap() - vel.first().unwrap(); // arc direction
             }
@@ -198,13 +272,19 @@ impl MusicEmbedding {
 
         // Dimensions 12-15: harmonic content (note class distribution)
         let mut note_classes = [0u32; 12];
-        for e in &phrase.events { note_classes[e.pitch.note_class() as usize] += 1; }
+        for e in &phrase.events {
+            note_classes[e.pitch.note_class() as usize] += 1;
+        }
         let total_nc: u32 = note_classes.iter().sum();
         if total_nc > 0 {
             // Tonality index: how concentrated is the pitch distribution
-            let entropy = note_classes.iter()
+            let entropy = note_classes
+                .iter()
                 .filter(|&&c| c > 0)
-                .map(|&c| { let p = c as f32 / total_nc as f32; -p * p.log2() })
+                .map(|&c| {
+                    let p = c as f32 / total_nc as f32;
+                    -p * p.log2()
+                })
                 .sum::<f32>();
             v[12] = 1.0 - (entropy / 3.585_f32); // 1.0 = highly tonal, 0.0 = atonal
         }
@@ -212,10 +292,14 @@ impl MusicEmbedding {
         // Dimensions 13-15: phrase shape
         v[13] = phrase.len() as f32 / 32.0; // phrase length (normalized)
         v[14] = if !intervals.is_empty() {
-            let direction_changes = intervals.windows(2)
-                .filter(|w| (w[0] > 0) != (w[1] > 0)).count();
+            let direction_changes = intervals
+                .windows(2)
+                .filter(|w| (w[0] > 0) != (w[1] > 0))
+                .count();
             direction_changes as f32 / intervals.len().max(1) as f32
-        } else { 0.0 }; // contour complexity
+        } else {
+            0.0
+        }; // contour complexity
 
         // Dimensions 15-31: first 17 interval values (padded)
         for (i, &interval) in intervals.iter().take(17).enumerate() {
@@ -230,15 +314,18 @@ impl MusicEmbedding {
         let dot: f32 = self.0.iter().zip(other.0.iter()).map(|(a, b)| a * b).sum();
         let norm_a: f32 = self.0.iter().map(|v| v * v).sum::<f32>().sqrt();
         let norm_b: f32 = other.0.iter().map(|v| v * v).sum::<f32>().sqrt();
-        if norm_a == 0.0 || norm_b == 0.0 { return 0.0; }
+        if norm_a == 0.0 || norm_b == 0.0 {
+            return 0.0;
+        }
         dot / (norm_a * norm_b)
     }
 
     /// Weighted average of two embeddings (for blending personas).
     pub fn blend(&self, other: &Self, self_weight: f32) -> Self {
         let mut result = [0.0f32; 32];
-        for i in 0..32 {
-            result[i] = self.0[i] * self_weight + other.0[i] * (1.0 - self_weight);
+        let other_weight = 1.0 - self_weight;
+        for (r, (a, b)) in result.iter_mut().zip(self.0.iter().zip(other.0.iter())) {
+            *r = a * self_weight + b * other_weight;
         }
         Self(result)
     }
@@ -264,22 +351,34 @@ pub struct Pattern {
 
 impl Pattern {
     pub fn new(embedding: MusicEmbedding, source: &str) -> Self {
-        Self { embedding, source_phrase: source.to_string(), success_count: 0,
-               fail_count: 0, context_tags: Vec::new(), generation: 0 }
+        Self {
+            embedding,
+            source_phrase: source.to_string(),
+            success_count: 0,
+            fail_count: 0,
+            context_tags: Vec::new(),
+            generation: 0,
+        }
     }
 
     /// How reliable is this pattern? Higher = more proven.
     pub fn confidence(&self) -> f32 {
         let total = self.success_count + self.fail_count;
-        if total == 0 { return 0.5; } // untested
+        if total == 0 {
+            return 0.5;
+        } // untested
         self.success_count as f32 / total as f32
     }
 
     /// Reinforce — this pattern worked in a jam.
-    pub fn reinforce(&mut self) { self.success_count += 1; }
+    pub fn reinforce(&mut self) {
+        self.success_count += 1;
+    }
 
     /// Penalize — this pattern didn't work.
-    pub fn penalize(&mut self) { self.fail_count += 1; }
+    pub fn penalize(&mut self) {
+        self.fail_count += 1;
+    }
 }
 
 /// The vector database storing all patterns for a persona.
@@ -291,49 +390,84 @@ pub struct PatternVectorDB {
 
 impl PatternVectorDB {
     pub fn new(max_patterns: usize) -> Self {
-        Self { patterns: Vec::new(), max_patterns }
+        Self {
+            patterns: Vec::new(),
+            max_patterns,
+        }
     }
 
     /// Add a pattern from MIDI digestion.
     pub fn ingest(&mut self, pattern: Pattern) {
         if self.patterns.len() >= self.max_patterns {
             // Evict the lowest-confidence pattern
-            if let Some(worst_idx) = self.patterns.iter().enumerate()
-                .min_by(|(_, a), (_, b)| a.confidence().partial_cmp(&b.confidence()).unwrap()) {
+            if let Some(worst_idx) = self.patterns.iter().enumerate().min_by(|(_, a), (_, b)| {
+                a.confidence()
+                    .partial_cmp(&b.confidence())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            }) {
                 self.patterns.remove(worst_idx.0);
             }
         }
         self.patterns.push(pattern);
     }
 
-    /// Query: find the K nearest patterns to a given embedding.
-    pub fn nearest_k(&self, query: &MusicEmbedding, k: usize) -> Vec<&Pattern> {
-        let mut scored: Vec<(f32, usize)> = self.patterns.iter().enumerate()
+    /// Query: find the indices of the K nearest patterns to an embedding.
+    ///
+    /// Indices are stable identifiers into `self.patterns` — prefer these over
+    /// re-matching by `source_phrase`, which is not unique (the same phrase can
+    /// be digested more than once).
+    pub fn nearest_k_indices(&self, query: &MusicEmbedding, k: usize) -> Vec<usize> {
+        let mut scored: Vec<(f32, usize)> = self
+            .patterns
+            .iter()
+            .enumerate()
             .map(|(i, p)| (query.similarity(&p.embedding), i))
             .collect();
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
-        scored.into_iter().take(k).map(|(_, i)| &self.patterns[i]).collect()
+        // Descending by similarity. `unwrap_or(Equal)` keeps the sort total even
+        // if a NaN ever slips through (it never should — norms are guarded).
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.into_iter().take(k).map(|(_, i)| i).collect()
+    }
+
+    /// Query: find the K nearest patterns to a given embedding.
+    pub fn nearest_k(&self, query: &MusicEmbedding, k: usize) -> Vec<&Pattern> {
+        self.nearest_k_indices(query, k)
+            .into_iter()
+            .map(|i| &self.patterns[i])
+            .collect()
     }
 
     /// Query: find patterns matching context tags.
     pub fn by_context(&self, tags: &[&str]) -> Vec<&Pattern> {
-        self.patterns.iter().filter(|p| {
-            tags.iter().any(|t| p.context_tags.iter().any(|ct| ct.contains(t)))
-        }).collect()
+        self.patterns
+            .iter()
+            .filter(|p| {
+                tags.iter()
+                    .any(|t| p.context_tags.iter().any(|ct| ct.contains(t)))
+            })
+            .collect()
     }
 
     /// The "soul print" — the average embedding of all high-confidence patterns.
     /// This is what makes the persona unique.
     pub fn soul_print(&self) -> MusicEmbedding {
-        let confident: Vec<&Pattern> = self.patterns.iter()
+        let confident: Vec<&Pattern> = self
+            .patterns
+            .iter()
             .filter(|p| p.confidence() > 0.6 && p.success_count > 2)
             .collect();
-        if confident.is_empty() { return MusicEmbedding::zero(); }
+        if confident.is_empty() {
+            return MusicEmbedding::zero();
+        }
         let mut avg = [0.0f32; 32];
         for p in &confident {
-            for (i, &v) in p.embedding.0.iter().enumerate() { avg[i] += v; }
+            for (i, &v) in p.embedding.0.iter().enumerate() {
+                avg[i] += v;
+            }
         }
-        for v in avg.iter_mut() { *v /= confident.len() as f32; }
+        for v in avg.iter_mut() {
+            *v /= confident.len() as f32;
+        }
         MusicEmbedding(avg)
     }
 
@@ -344,7 +478,9 @@ impl PatternVectorDB {
 
     /// Evolution ratio — what fraction of patterns are the persona's own.
     pub fn evolution_ratio(&self) -> f32 {
-        if self.patterns.is_empty() { return 0.0; }
+        if self.patterns.is_empty() {
+            return 0.0;
+        }
         self.evolved_count() as f32 / self.patterns.len() as f32
     }
 }
@@ -366,14 +502,21 @@ pub struct MusicianPersona {
 impl MusicianPersona {
     /// Create a new persona with named influences but no patterns yet.
     pub fn new(name: &str, instrument: &str) -> Self {
-        Self { name: name.to_string(), instrument: instrument.to_string(),
-               influence_weights: HashMap::new(), vector_db: PatternVectorDB::new(10_000),
-               jam_count: 0, total_notes_played: 0, soul_name: None }
+        Self {
+            name: name.to_string(),
+            instrument: instrument.to_string(),
+            influence_weights: HashMap::new(),
+            vector_db: PatternVectorDB::new(10_000),
+            jam_count: 0,
+            total_notes_played: 0,
+            soul_name: None,
+        }
     }
 
     /// Add an influence with a weight.
     pub fn add_influence(&mut self, name: &str, weight: f32) {
-        self.influence_weights.insert(name.to_string(), weight.clamp(0.0, 1.0));
+        self.influence_weights
+            .insert(name.to_string(), weight.clamp(0.0, 1.0));
     }
 
     /// Digest a phrase into the vector DB — learn from MIDI.
@@ -404,7 +547,11 @@ impl MusicianPersona {
         if !nearest.is_empty() {
             let total_conf: f32 = nearest.iter().map(|p| p.confidence()).sum();
             for p in &nearest {
-                let weight = if total_conf > 0.0 { p.confidence() / total_conf } else { 1.0 / nearest.len() as f32 };
+                let weight = if total_conf > 0.0 {
+                    p.confidence() / total_conf
+                } else {
+                    1.0 / nearest.len() as f32
+                };
                 for (i, &v) in p.embedding.0.iter().enumerate() {
                     response_embedding.0[i] += v * weight;
                 }
@@ -425,7 +572,11 @@ impl MusicianPersona {
 
         PhraseResponse {
             persona_name: self.name.clone(),
-            based_on: nearest.iter().map(|p| p.source_phrase.clone()).take(3).collect(),
+            based_on: nearest
+                .iter()
+                .map(|p| p.source_phrase.clone())
+                .take(3)
+                .collect(),
             response_shape: response_embedding.clone(),
             similarity_to_input: heard_embedding.similarity(&response_embedding),
             evolution_level: evolution,
@@ -436,16 +587,19 @@ impl MusicianPersona {
 
     /// Learn from a jam session outcome — reinforce or penalize patterns.
     pub fn learn_from_jam(&mut self, response: &PhraseResponse, success: bool) {
-        let nearest = self.vector_db.nearest_k(&response.response_shape, 3);
-        // Can't mutate while borrowing, so collect indices
-        let indices: Vec<usize> = nearest.iter().map(|p| {
-            self.vector_db.patterns.iter().position(|x| x.source_phrase == p.source_phrase).unwrap_or(0)
-        }).collect();
+        // Resolve the nearest patterns to stable indices up front (the borrow
+        // ends here), then mutate. Using indices — not `source_phrase` matching —
+        // avoids reinforcing the wrong pattern when two share a source name.
+        let indices = self
+            .vector_db
+            .nearest_k_indices(&response.response_shape, 3);
         for idx in indices {
             if success {
                 self.vector_db.patterns[idx].reinforce();
                 // High-success patterns in generation 0 can spawn generation 1 variants
-                if self.vector_db.patterns[idx].generation == 0 && self.vector_db.patterns[idx].success_count > 5 {
+                if self.vector_db.patterns[idx].generation == 0
+                    && self.vector_db.patterns[idx].success_count > 5
+                {
                     let mut evolved = self.vector_db.patterns[idx].clone();
                     evolved.generation = 1;
                     evolved.source_phrase = format!("evolved:{}", evolved.source_phrase);
@@ -471,32 +625,47 @@ impl MusicianPersona {
     /// The persona's unique identity vector.
     pub fn identity(&self) -> MusicEmbedding {
         let soul = self.vector_db.soul_print();
-        if soul.identity_strength() > 0.0 { soul } else {
+        if soul.identity_strength() > 0.0 {
+            soul
+        } else {
             // No soul yet — blend all influences equally
             let all: Vec<&Pattern> = self.vector_db.patterns.iter().collect();
-            if all.is_empty() { return MusicEmbedding::zero(); }
+            if all.is_empty() {
+                return MusicEmbedding::zero();
+            }
             let mut avg = [0.0f32; 32];
-            for p in &all { for (i, &v) in p.embedding.0.iter().enumerate() { avg[i] += v; } }
-            for v in avg.iter_mut() { *v /= all.len() as f32; }
+            for p in &all {
+                for (i, &v) in p.embedding.0.iter().enumerate() {
+                    avg[i] += v;
+                }
+            }
+            for v in avg.iter_mut() {
+                *v /= all.len() as f32;
+            }
             MusicEmbedding(avg)
         }
     }
 }
 
 /// Simple deterministic noise for mutation (no rand dependency).
+///
+/// A classic sine-hash: multiply by a large irrational-ish constant, take the
+/// sine, then the fractional part of another scaled value. Deterministic in
+/// `seed`, output in roughly [-1.0, 1.0]. Exact constants don't matter — this
+/// is jitter for pattern mutation, not cryptographic randomness.
 fn rand_simple(seed: f32) -> f32 {
-    let x = (seed * 12345.6789).sin();
-    (x * 43758.5453).fract() * 2.0 - 1.0
+    let x = (seed * 12_345.679).sin();
+    (x * 43_758.547).fract() * 2.0 - 1.0
 }
 
 /// A persona's response to hearing a phrase.
 #[derive(Debug, Clone)]
 pub struct PhraseResponse {
     pub persona_name: String,
-    pub based_on: Vec<String>,        // which stored patterns influenced the response
+    pub based_on: Vec<String>, // which stored patterns influenced the response
     pub response_shape: MusicEmbedding,
-    pub similarity_to_input: f32,     // how similar the response is to what was heard
-    pub evolution_level: f32,         // 0.0 = pure imitation, 1.0 = fully evolved
+    pub similarity_to_input: f32, // how similar the response is to what was heard
+    pub evolution_level: f32,     // 0.0 = pure imitation, 1.0 = fully evolved
     pub jam_number: u32,
     pub soul_active: bool,
 }
@@ -515,14 +684,18 @@ pub struct JamSession {
 #[derive(Debug, Clone)]
 pub struct JamRound {
     pub responses: Vec<PhraseResponse>,
-    pub harmony_score: f32,       // how well the responses fit together
-    pub surprise_score: f32,      // how unexpected the responses were
+    pub harmony_score: f32,  // how well the responses fit together
+    pub surprise_score: f32, // how unexpected the responses were
     pub productive: bool,
 }
 
 impl JamSession {
     pub fn new(personas: Vec<MusicianPersona>, context: &str) -> Self {
-        Self { personas, rounds: Vec::new(), context: context.to_string() }
+        Self {
+            personas,
+            rounds: Vec::new(),
+            context: context.to_string(),
+        }
     }
 
     /// Run one round of the jam — each persona responds to a seed phrase.
@@ -538,19 +711,29 @@ impl JamSession {
             let mut sim_sum = 0.0f32;
             let mut count = 0;
             for i in 0..responses.len() {
-                for j in (i+1)..responses.len() {
-                    sim_sum += responses[i].response_shape.similarity(&responses[j].response_shape);
+                for j in (i + 1)..responses.len() {
+                    sim_sum += responses[i]
+                        .response_shape
+                        .similarity(&responses[j].response_shape);
                     count += 1;
                 }
             }
-            if count > 0 { sim_sum / count as f32 } else { 0.0 }
-        } else { 0.5 };
+            if count > 0 {
+                sim_sum / count as f32
+            } else {
+                0.0
+            }
+        } else {
+            0.5
+        };
 
         // Surprise — how different is the average response from the input?
         let _seed_embedding = MusicEmbedding::from_phrase(seed);
-        let surprise: f32 = responses.iter()
+        let surprise: f32 = responses
+            .iter()
             .map(|r| 1.0 - r.similarity_to_input)
-            .sum::<f32>() / responses.len().max(1) as f32;
+            .sum::<f32>()
+            / responses.len().max(1) as f32;
 
         let productive = harmony > 0.3 && surprise > 0.2;
 
@@ -562,14 +745,21 @@ impl JamSession {
             }
         }
 
-        let round = JamRound { responses, harmony_score: harmony, surprise_score: surprise, productive };
+        let round = JamRound {
+            responses,
+            harmony_score: harmony,
+            surprise_score: surprise,
+            productive,
+        };
         self.rounds.push(round);
         self.rounds.last_mut().unwrap()
     }
 
     /// The session's overall harmony — are the personas finding common ground?
     pub fn session_harmony(&self) -> f32 {
-        if self.rounds.is_empty() { return 0.0; }
+        if self.rounds.is_empty() {
+            return 0.0;
+        }
         self.rounds.iter().map(|r| r.harmony_score).sum::<f32>() / self.rounds.len() as f32
     }
 
@@ -580,7 +770,10 @@ impl JamSession {
 
     /// Each persona's soul percentage after this session.
     pub fn soul_report(&self) -> Vec<(&str, f32)> {
-        self.personas.iter().map(|p| (p.name.as_str(), p.soul_percentage())).collect()
+        self.personas
+            .iter()
+            .map(|p| (p.name.as_str(), p.soul_percentage()))
+            .collect()
     }
 }
 
@@ -589,29 +782,41 @@ impl JamSession {
 /// Parse a simplified MIDI-like byte stream into phrases.
 /// Real MIDI parsing would use the `midly` crate; this provides the interface.
 pub fn parse_midi_events(raw: &[(u8, u8, u32, u32)]) -> Vec<NoteEvent> {
-    raw.iter().map(|&(pitch, vel, dur, offset)| NoteEvent {
-        pitch: Pitch(pitch), velocity: Velocity(vel),
-        duration: Duration(dur), tick_offset: offset,
-    }).collect()
+    raw.iter()
+        .map(|&(pitch, vel, dur, offset)| NoteEvent {
+            pitch: Pitch(pitch),
+            velocity: Velocity(vel),
+            duration: Duration(dur),
+            tick_offset: offset,
+        })
+        .collect()
 }
 
 /// Split events into phrases at rest boundaries (long gaps).
 pub fn split_phrases(events: &[NoteEvent], instrument: &str, source: &str) -> Vec<Phrase> {
-    if events.is_empty() { return vec![]; }
+    if events.is_empty() {
+        return vec![];
+    }
     let mut phrases = Vec::new();
     let mut current = Vec::new();
 
     for e in events {
         // A rest of more than a quarter note starts a new phrase
         if e.tick_offset > 480 && !current.is_empty() {
-            phrases.push(Phrase { events: std::mem::take(&mut current),
-                                   source: source.to_string(), instrument: instrument.to_string() });
+            phrases.push(Phrase {
+                events: std::mem::take(&mut current),
+                source: source.to_string(),
+                instrument: instrument.to_string(),
+            });
         }
         current.push(*e);
     }
     if !current.is_empty() {
-        phrases.push(Phrase { events: current, source: source.to_string(),
-                               instrument: instrument.to_string() });
+        phrases.push(Phrase {
+            events: current,
+            source: source.to_string(),
+            instrument: instrument.to_string(),
+        });
     }
     phrases
 }
@@ -621,8 +826,12 @@ mod tests {
     use super::*;
 
     fn make_note(pitch: u8, vel: u8, dur: u32, offset: u32) -> NoteEvent {
-        NoteEvent { pitch: Pitch(pitch), velocity: Velocity(vel),
-                     duration: Duration(dur), tick_offset: offset }
+        NoteEvent {
+            pitch: Pitch(pitch),
+            velocity: Velocity(vel),
+            duration: Duration(dur),
+            tick_offset: offset,
+        }
     }
 
     fn miles_phrase() -> Phrase {
@@ -630,10 +839,10 @@ mod tests {
         Phrase {
             events: vec![
                 make_note(62, 80, 480, 0),   // D, quarter note
-                make_note(65, 70, 240, 240),  // F, eighth, big rest before
-                make_note(67, 90, 960, 120),  // G, half note
-                make_note(65, 60, 240, 480),  // F, eighth, long rest
-                make_note(62, 85, 480, 0),    // D, quarter
+                make_note(65, 70, 240, 240), // F, eighth, big rest before
+                make_note(67, 90, 960, 120), // G, half note
+                make_note(65, 60, 240, 480), // F, eighth, long rest
+                make_note(62, 85, 480, 0),   // D, quarter
             ],
             source: "milesttes2_chorus3".to_string(),
             instrument: "trumpet".to_string(),
@@ -644,15 +853,15 @@ mod tests {
         // Coltrane style: dense, wide range, sheets of sound
         Phrase {
             events: vec![
-                make_note(60, 100, 120, 0),   // C, sixteenth
-                make_note(62, 95, 120, 0),    // D
-                make_note(64, 100, 120, 0),   // E
-                make_note(65, 105, 120, 0),   // F
-                make_note(67, 110, 120, 0),   // G
-                make_note(69, 100, 120, 0),   // A
-                make_note(71, 95, 120, 0),    // B
-                make_note(72, 100, 120, 0),   // C5
-                make_note(74, 110, 240, 0),   // D5, slightly longer landing
+                make_note(60, 100, 120, 0), // C, sixteenth
+                make_note(62, 95, 120, 0),  // D
+                make_note(64, 100, 120, 0), // E
+                make_note(65, 105, 120, 0), // F
+                make_note(67, 110, 120, 0), // G
+                make_note(69, 100, 120, 0), // A
+                make_note(71, 95, 120, 0),  // B
+                make_note(72, 100, 120, 0), // C5
+                make_note(74, 110, 240, 0), // D5, slightly longer landing
             ],
             source: "coltrane_giant_steps_solo".to_string(),
             instrument: "tenor_sax".to_string(),
@@ -664,34 +873,38 @@ mod tests {
         Phrase {
             events: vec![
                 make_note(60, 120, 240, 0),   // C, loud, short
-                make_note(72, 100, 240, 960),  // C5, big jump up, long rest before
-                make_note(63, 115, 120, 0),    // Eb, dissonant
-                make_note(55, 90, 480, 240),   // G3, drops way down
+                make_note(72, 100, 240, 960), // C5, big jump up, long rest before
+                make_note(63, 115, 120, 0),   // Eb, dissonant
+                make_note(55, 90, 480, 240),  // G3, drops way down
             ],
             source: "monk_straight_no_chaser".to_string(),
             instrument: "piano".to_string(),
         }
     }
 
-    #[test] fn pitch_frequency() {
+    #[test]
+    fn pitch_frequency() {
         let a4 = Pitch(69); // A4
         assert!((a4.frequency_hz() - 440.0).abs() < 0.1);
     }
 
-    #[test] fn velocity_dynamics() {
+    #[test]
+    fn velocity_dynamics() {
         assert_eq!(Velocity(30).dynamic_mark(), "pp");
         assert_eq!(Velocity(80).dynamic_mark(), "mf");
         assert_eq!(Velocity(120).dynamic_mark(), "ff");
     }
 
-    #[test] fn phrase_intervals() {
+    #[test]
+    fn phrase_intervals() {
         let p = miles_phrase();
         let intervals = p.intervals();
         assert_eq!(intervals.len(), 4);
         assert_eq!(intervals[0], 3); // D→F, up 3
     }
 
-    #[test] fn phrase_rhythm_pattern() {
+    #[test]
+    fn phrase_rhythm_pattern() {
         let p = miles_phrase();
         let rhythm = p.rhythm_pattern();
         assert_eq!(rhythm.len(), 5);
@@ -699,32 +912,37 @@ mod tests {
         assert!((sum - 1.0).abs() < 0.01); // normalized
     }
 
-    #[test] fn miles_rest_ratio() {
+    #[test]
+    fn miles_rest_ratio() {
         let p = miles_phrase();
         // Miles uses lots of space
         assert!(p.rest_ratio() > 0.2, "Miles should have notable rests");
     }
 
-    #[test] fn coltrane_dense() {
+    #[test]
+    fn coltrane_dense() {
         let p = coltrane_phrase();
         assert!(p.len() > 6);
         assert!(p.register_span() > 10, "Coltrane uses wide range");
     }
 
-    #[test] fn monk_angular() {
+    #[test]
+    fn monk_angular() {
         let p = monk_phrase();
         let intervals = p.intervals();
         let max_leap = intervals.iter().map(|i| i.abs()).max().unwrap_or(0);
         assert!(max_leap > 10, "Monk makes big unexpected leaps");
     }
 
-    #[test] fn embedding_similarity_self() {
+    #[test]
+    fn embedding_similarity_self() {
         let p = miles_phrase();
         let e = MusicEmbedding::from_phrase(&p);
         assert!((e.similarity(&e) - 1.0).abs() < 0.01);
     }
 
-    #[test] fn embedding_different_styles() {
+    #[test]
+    fn embedding_different_styles() {
         let miles_e = MusicEmbedding::from_phrase(&miles_phrase());
         let coltrane_e = MusicEmbedding::from_phrase(&coltrane_phrase());
         let monk_e = MusicEmbedding::from_phrase(&monk_phrase());
@@ -737,14 +955,16 @@ mod tests {
         assert!(mm_sim < 1.0);
     }
 
-    #[test] fn embedding_blend() {
+    #[test]
+    fn embedding_blend() {
         let a = MusicEmbedding::from_phrase(&miles_phrase());
         let b = MusicEmbedding::from_phrase(&coltrane_phrase());
         let blended = a.blend(&b, 0.5);
         assert!(blended.identity_strength() > 0.0);
     }
 
-    #[test] fn persona_digest_and_query() {
+    #[test]
+    fn persona_digest_and_query() {
         let mut miles = MusicianPersona::new("Miles", "trumpet");
         miles.add_influence("Miles Davis", 1.0);
         miles.add_influence("Clark Terry", 0.3);
@@ -762,11 +982,14 @@ mod tests {
         }
 
         assert!(miles.vector_db.patterns.len() >= 7);
-        let nearest = miles.vector_db.nearest_k(&MusicEmbedding::from_phrase(&miles_phrase()), 3);
+        let nearest = miles
+            .vector_db
+            .nearest_k(&MusicEmbedding::from_phrase(&miles_phrase()), 3);
         assert!(nearest.len() >= 3);
     }
 
-    #[test] fn persona_evolution() {
+    #[test]
+    fn persona_evolution() {
         let mut miles = MusicianPersona::new("Miles", "trumpet");
         for i in 0..5 {
             let mut p = miles_phrase();
@@ -788,31 +1011,39 @@ mod tests {
         assert!(miles.jam_count >= 8);
     }
 
-    #[test] fn jam_session_multi_persona() {
+    #[test]
+    fn jam_session_multi_persona() {
         let mut miles = MusicianPersona::new("Miles", "trumpet");
         miles.add_influence("Miles Davis", 1.0);
         for i in 0..5 {
-            let mut p = miles_phrase(); p.source = format!("m{}", i);
+            let mut p = miles_phrase();
+            p.source = format!("m{}", i);
             miles.digest_phrase(&p, "Miles Davis");
         }
 
         let mut coltrane = MusicianPersona::new("Coltrane", "tenor_sax");
         coltrane.add_influence("John Coltrane", 1.0);
         for i in 0..5 {
-            let mut p = coltrane_phrase(); p.source = format!("c{}", i);
+            let mut p = coltrane_phrase();
+            p.source = format!("c{}", i);
             coltrane.digest_phrase(&p, "John Coltrane");
         }
 
         let mut monk = MusicianPersona::new("Monk", "piano");
         monk.add_influence("Thelonious Monk", 1.0);
         for i in 0..5 {
-            let mut p = monk_phrase(); p.source = format!("k{}", i);
+            let mut p = monk_phrase();
+            p.source = format!("k{}", i);
             monk.digest_phrase(&p, "Thelonious Monk");
         }
 
         let mut jam = JamSession::new(vec![miles, coltrane, monk], "jazz_standards");
         for round_num in 0..5 {
-            let seed = if round_num % 2 == 0 { miles_phrase() } else { coltrane_phrase() };
+            let seed = if round_num % 2 == 0 {
+                miles_phrase()
+            } else {
+                coltrane_phrase()
+            };
             let round = jam.round(&seed);
             // Each round should produce 3 responses
             assert_eq!(round.responses.len(), 3);
@@ -827,7 +1058,8 @@ mod tests {
         assert_eq!(souls.len(), 3);
     }
 
-    #[test] fn pattern_confidence() {
+    #[test]
+    fn pattern_confidence() {
         let mut p = Pattern::new(MusicEmbedding::zero(), "test");
         assert_eq!(p.confidence(), 0.5); // untested
         p.reinforce();
@@ -836,7 +1068,8 @@ mod tests {
         assert!((p.confidence() - 0.5).abs() < 0.01);
     }
 
-    #[test] fn split_phrases_at_rests() {
+    #[test]
+    fn split_phrases_at_rests() {
         let events = vec![
             make_note(60, 80, 240, 0),
             make_note(62, 80, 240, 0),
@@ -849,22 +1082,27 @@ mod tests {
         assert_eq!(phrases[1].events.len(), 2);
     }
 
-    #[test] fn soul_print_emerges() {
+    #[test]
+    fn soul_print_emerges() {
         let mut persona = MusicianPersona::new("Test", "guitar");
         // Add patterns with high success counts
         for i in 0..15 {
-            let mut p = miles_phrase(); p.source = format!("s{}", i);
+            let mut p = miles_phrase();
+            p.source = format!("s{}", i);
             persona.digest_phrase(&p, "influence");
         }
         // Simulate success by reinforcing some patterns
         for p in &mut persona.vector_db.patterns {
-            for _ in 0..5 { p.reinforce(); }
+            for _ in 0..5 {
+                p.reinforce();
+            }
         }
         let soul = persona.vector_db.soul_print();
         assert!(soul.identity_strength() > 0.0);
     }
 
-    #[test] fn full_lifecycle() {
+    #[test]
+    fn full_lifecycle() {
         // 1. Create persona with influences
         let mut miles = MusicianPersona::new("Miles AI", "trumpet");
         miles.add_influence("Miles Davis", 0.8);
@@ -872,7 +1110,11 @@ mod tests {
 
         // 2. Digest MIDI (simulated)
         for i in 0..20 {
-            let mut p = if i < 12 { miles_phrase() } else { monk_phrase() };
+            let mut p = if i < 12 {
+                miles_phrase()
+            } else {
+                monk_phrase()
+            };
             p.source = format!("digest_{}", i);
             let influence = if i < 12 { "Miles Davis" } else { "Chet Baker" };
             miles.digest_phrase(&p, influence);
@@ -882,7 +1124,11 @@ mod tests {
         // 3. Jam repeatedly
         let mut jam = JamSession::new(vec![miles], "late_night_session");
         for r in 0..10 {
-            let seed = if r % 3 == 0 { miles_phrase() } else { coltrane_phrase() };
+            let seed = if r % 3 == 0 {
+                miles_phrase()
+            } else {
+                coltrane_phrase()
+            };
             jam.round(&seed);
         }
 
@@ -895,17 +1141,24 @@ mod tests {
 
     // ── Edge-case tests ───────────────────────────────────────────
 
-    #[test] fn empty_phrase_embedding() {
-        let p = Phrase { events: vec![], source: "empty".into(), instrument: "silence".into() };
+    #[test]
+    fn empty_phrase_embedding() {
+        let p = Phrase {
+            events: vec![],
+            source: "empty".into(),
+            instrument: "silence".into(),
+        };
         let e = MusicEmbedding::from_phrase(&p);
         assert_eq!(e.0, [0.0f32; 32]);
         assert_eq!(e.identity_strength(), 0.0);
     }
 
-    #[test] fn single_note_phrase() {
+    #[test]
+    fn single_note_phrase() {
         let p = Phrase {
             events: vec![make_note(60, 80, 480, 0)],
-            source: "single".into(), instrument: "piano".into(),
+            source: "single".into(),
+            instrument: "piano".into(),
         };
         let e = MusicEmbedding::from_phrase(&p);
         // No intervals → dims 2-5 stay 0
@@ -915,7 +1168,8 @@ mod tests {
         assert!(e.0[0] > 0.0);
     }
 
-    #[test] fn zero_embedding_similarity_to_anything_is_zero() {
+    #[test]
+    fn zero_embedding_similarity_to_anything_is_zero() {
         let zero = MusicEmbedding::zero();
         let p = miles_phrase();
         let real = MusicEmbedding::from_phrase(&p);
@@ -923,19 +1177,26 @@ mod tests {
         assert_eq!(real.similarity(&zero), 0.0);
     }
 
-    #[test] fn pattern_confidence_all_failures() {
+    #[test]
+    fn pattern_confidence_all_failures() {
         let mut p = Pattern::new(MusicEmbedding::zero(), "doomed");
-        for _ in 0..10 { p.penalize(); }
+        for _ in 0..10 {
+            p.penalize();
+        }
         assert_eq!(p.confidence(), 0.0);
     }
 
-    #[test] fn pattern_confidence_all_successes() {
+    #[test]
+    fn pattern_confidence_all_successes() {
         let mut p = Pattern::new(MusicEmbedding::zero(), "golden");
-        for _ in 0..10 { p.reinforce(); }
+        for _ in 0..10 {
+            p.reinforce();
+        }
         assert_eq!(p.confidence(), 1.0);
     }
 
-    #[test] fn vector_db_eviction_removes_weakest() {
+    #[test]
+    fn vector_db_eviction_removes_weakest() {
         let mut db = PatternVectorDB::new(3);
         // Add 3 patterns with varying confidence
         let mut strong = Pattern::new(MusicEmbedding::from_phrase(&miles_phrase()), "strong");
@@ -959,18 +1220,21 @@ mod tests {
         assert!(db.patterns.iter().all(|p| p.source_phrase != "weak"));
     }
 
-    #[test] fn vector_db_empty_soul_print() {
+    #[test]
+    fn vector_db_empty_soul_print() {
         let db = PatternVectorDB::new(100);
         let soul = db.soul_print();
         assert_eq!(soul.identity_strength(), 0.0);
     }
 
-    #[test] fn split_phrases_empty_input() {
+    #[test]
+    fn split_phrases_empty_input() {
         let phrases = split_phrases(&[], "piano", "silence");
         assert!(phrases.is_empty());
     }
 
-    #[test] fn split_phrases_single_phrase_no_rests() {
+    #[test]
+    fn split_phrases_single_phrase_no_rests() {
         let events = vec![
             make_note(60, 80, 240, 0),
             make_note(62, 80, 240, 0),
@@ -981,7 +1245,8 @@ mod tests {
         assert_eq!(phrases[0].events.len(), 3);
     }
 
-    #[test] fn duration_helpers() {
+    #[test]
+    fn duration_helpers() {
         assert!(Duration(480).is_long());
         assert!(!Duration(240).is_long());
         assert!(Duration(240).is_short());
@@ -989,14 +1254,16 @@ mod tests {
         assert!((Duration(960).quarter_notes() - 2.0).abs() < 0.01);
     }
 
-    #[test] fn pitch_octave_and_class() {
+    #[test]
+    fn pitch_octave_and_class() {
         assert_eq!(Pitch(60).octave(), 4); // C4
         assert_eq!(Pitch(60).note_class(), 0); // C
         assert_eq!(Pitch(69).note_class(), 9); // A
         assert_eq!(Pitch(72).octave(), 5); // C5
     }
 
-    #[test] fn parse_midi_events_roundtrip() {
+    #[test]
+    fn parse_midi_events_roundtrip() {
         let raw = vec![(60, 80, 240, 0), (62, 90, 480, 120)];
         let events = parse_midi_events(&raw);
         assert_eq!(events.len(), 2);
@@ -1004,17 +1271,20 @@ mod tests {
         assert_eq!(events[1].velocity.0, 90);
     }
 
-    #[test] fn embedding_identity_strength_positive() {
+    #[test]
+    fn embedding_identity_strength_positive() {
         let p = coltrane_phrase();
         let e = MusicEmbedding::from_phrase(&p);
         // Coltrane's dense phrase should have a strong identity
         assert!(e.identity_strength() > 0.0);
     }
 
-    #[test] fn jam_session_single_persona() {
+    #[test]
+    fn jam_session_single_persona() {
         let mut miles = MusicianPersona::new("Miles", "trumpet");
         for i in 0..5 {
-            let mut p = miles_phrase(); p.source = format!("m{}", i);
+            let mut p = miles_phrase();
+            p.source = format!("m{}", i);
             miles.digest_phrase(&p, "Miles Davis");
         }
         let mut jam = JamSession::new(vec![miles], "solo");
@@ -1024,7 +1294,8 @@ mod tests {
         assert!((round.harmony_score - 0.5).abs() < 0.01);
     }
 
-    #[test] fn persona_no_influences_has_zero_identity() {
+    #[test]
+    fn persona_no_influences_has_zero_identity() {
         let persona = MusicianPersona::new("Empty", "silence");
         let id = persona.identity();
         assert_eq!(id.identity_strength(), 0.0);
