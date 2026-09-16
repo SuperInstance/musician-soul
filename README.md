@@ -39,10 +39,14 @@ behind the notes — not a synthesizer. Want to hear it? See
 #    harmony, surprise, and soul emerging. No MIDI files needed.
 cargo run --example jam
 
-# 2. Run the test suite (32 tests: unit, integration, edge cases).
+# 2. Digest a real .mid file (or a synthesized demo clip with no argument).
+cargo run --example play_midi -- path/to/solo.mid
+cargo run --example play_midi          # no file → built-in demo clip
+
+# 3. Run the test suite (unit, integration, MIDI parser, edge cases).
 cargo test
 
-# 3. Read the API docs in your browser.
+# 4. Read the API docs in your browser.
 cargo doc --open
 ```
 
@@ -139,7 +143,8 @@ let mut miles = MusicianPersona::new("Miles", "trumpet");
 miles.add_influence("Miles Davis", 1.0);
 miles.add_influence("Clark Terry", 0.3);
 
-// Digest a phrase (simulated — real MIDI would use a crate like `midly`).
+// Digest a phrase. (Build events by hand as below, or load a real .mid file
+// with the dependency-free `midi` module — see "Ingesting real MIDI".)
 let phrase = Phrase {
     events: vec![
         NoteEvent { pitch: Pitch(62), velocity: Velocity(80), duration: Duration(480), tick_offset: 0 },
@@ -247,6 +252,29 @@ emerges from *diversity*. Put different voices in the room.
 ### Free functions
 - `parse_midi_events(raw)` → `Vec<NoteEvent>` — from `(pitch, vel, dur, offset)` tuples
 - `split_phrases(events, instrument, source)` → `Vec<Phrase>` — split at rest boundaries
+
+### Ingesting real MIDI (`midi` module)
+A dependency-free Standard MIDI File parser (formats 0 and 1) so a persona can
+digest actual `.mid` files, not just hand-built events. It never panics on bad
+input — every path returns `Result<_, midi::MidiError>`.
+
+- `midi::parse_smf(bytes)` → `Result<Vec<NoteEvent>, MidiError>` — one
+  time-ordered, monophonic-reduced note stream; timing rescaled to 480 TPQN.
+- `midi::phrases_from_smf(bytes, instrument, source)` → `Result<Vec<Phrase>, MidiError>`
+  — `parse_smf` + `split_phrases`.
+
+```rust
+use musician_soul::midi;
+
+let bytes = std::fs::read("solo.mid")?;
+let phrases = midi::phrases_from_smf(&bytes, "trumpet", "solo.mid")?;
+println!("{} phrases", phrases.len());
+```
+
+Try it: `cargo run --example play_midi -- your_solo.mid`. For the fleet's
+tensor-domain MIDI representation, see
+[tensor-midi](https://github.com/SuperInstance/tensor-midi) /
+[flux-tensor-midi](https://github.com/SuperInstance/flux-tensor-midi).
 
 ## Glossary (for readers from other headspaces)
 

@@ -43,3 +43,23 @@ A thorough pass over the crate for zero-shot playtesters and other headspaces.
 **Status:** Operational — tests 32 + 1 doctest green, clippy clean, fmt clean.
 **Next duty:** a real MIDI front-end (`tensor-midi` → `Phrase`) is the one seam
 that turns the prototype into a fielded node.
+
+## Third Watch — Real MIDI Ingestion
+
+**Date:** 2026-09-16
+
+Built the seam the last watch named. Added [`src/midi.rs`](../src/midi.rs): a
+dependency-free Standard MIDI File parser (formats 0 and 1) that turns real
+`.mid` files into digestible phrases — `midi::parse_smf` and
+`midi::phrases_from_smf`. It handles variable-length delta times, running status,
+meta/SysEx skipping, note-on-velocity-0 as note-off, and rescales any file's
+division to the crate's 480-ticks-per-quarter convention. It reduces polyphony to
+a time-ordered stream (the monophonic phrase shape the embedder wants) and never
+panics on malformed input — every path returns `Result<_, MidiError>`. Added 11
+parser tests (round-trips, rest gaps, rescaling, running status, meta skipping,
+truncation) and [`examples/play_midi.rs`](../examples/play_midi.rs), which digests
+a file you name or a synthesized demo clip. Also derived `PartialEq`/`Eq` on
+`NoteEvent`. Docs (README, FLEET) updated: the prototype now takes real music.
+
+**Status:** Operational — tests 43 + 2 doctests green, clippy clean, fmt clean.
+**Next duty:** the tensor seam — `From<tensor_midi::Clip>` for in-memory digestion.

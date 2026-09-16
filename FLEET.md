@@ -33,9 +33,12 @@ vectors for its audio back-ends.
   generation; a persona's `soul_print()` is exactly the kind of compact style
   vector these could condition on.
 
-**Concrete next bridge:** `MusicEmbedding::from_phrase` currently takes hand-built
-events. A `From<tensor_midi::Clip>` (or a `parse_midi_events` that accepts a real
-`.mid`) is the one seam that turns this prototype into a fielded node.
+**The bridge is now built.** The `midi` module parses real Standard MIDI Files
+(`.mid`) with no dependencies — `midi::phrases_from_smf(bytes, instrument, source)`
+turns actual MIDI into digestible phrases. Run
+`cargo run --example play_midi -- your_solo.mid`. The remaining seam is the
+*tensor* domain: a `From<tensor_midi::Clip>` would let a persona digest
+tensor-midi's representation directly, without round-tripping through a file.
 
 ## Mapping onto quilt's cell model
 
