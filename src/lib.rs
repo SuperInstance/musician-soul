@@ -66,6 +66,9 @@
 
 use std::collections::HashMap;
 
+/// Real Standard MIDI File (`.mid`) ingestion — see [`midi`].
+pub mod midi;
+
 // ── Musical Types ─────────────────────────────────────────────────
 
 /// A MIDI pitch (0-127) with semantic meaning.
@@ -126,7 +129,7 @@ impl Duration {
 }
 
 /// A single MIDI note event.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NoteEvent {
     pub pitch: Pitch,
     pub velocity: Velocity,
