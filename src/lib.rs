@@ -69,6 +69,10 @@ use std::collections::HashMap;
 /// Real Standard MIDI File (`.mid`) ingestion — see [`midi`].
 pub mod midi;
 
+/// Cheap MIR melody-analysis features (contour, chroma, syncopation, edit
+/// similarity) — see [`analysis`].
+pub mod analysis;
+
 // ── Musical Types ─────────────────────────────────────────────────
 
 /// A MIDI pitch (0-127) with semantic meaning.

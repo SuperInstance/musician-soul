@@ -226,6 +226,16 @@ Two affordances make the personas legible and interactive:
 - `.rest_ratio()` — silence vs note ratio
 - `.len()` / `.is_empty()`
 
+### Melody analysis (`analysis` module)
+Cheap, dependency-free MIR features that enrich what you can measure about a
+phrase (they don't change the embedding — they're additive). See
+[Prior art](#prior-art--design-notes) for citations.
+- `.parsons_code()` → `String` — `U`/`D`/`R` contour (transposition-invariant)
+- `.huron_contour()` → `HuronContour` — the 9-type first/mean/last contour class
+- `.pitch_class_histogram()` → `[f32; 12]` — normalized chroma (tonal color)
+- `.syncopation()` → `f32` — an LHL-style off-beat/metric-weight index
+- `.interval_edit_similarity(other)` → `f32` — melodic similarity by edit distance on interval strings (complements cosine)
+
 ### MusicEmbedding
 - `MusicEmbedding::from_phrase(phrase)` — extract the 32-dim embedding
 - `MusicEmbedding::zero()` — zero vector
@@ -342,6 +352,31 @@ artistic taste. The `soul_print()` isn't a metaphor — it's a concrete vector
 representing what this persona has independently discovered works. The generation
 counter is the key mechanism: Gen-0 is imitation, Gen-1+ is invention, and when a
 persona has enough Gen-1+ patterns it "names its soul."
+
+## Prior art & design notes
+
+The `analysis` module's features are standard in music information retrieval; the
+design was cross-checked against current work so the crate stays principled while
+remaining pure-Rust and dependency-free:
+
+- **Parsons contour** — Parsons, *The Directory of Tunes and Musical Themes* (1975);
+  the classic transposition-invariant melodic index.
+- **Huron 9-type contour** — Huron (1996), *The melodic arch in Western folksongs*,
+  PNAS.
+- **Pitch-class histogram (chroma)** — a standard symbolic tonal feature (e.g.
+  jSymbolic, ISMIR 2018).
+- **Syncopation** — Longuet-Higgins & Lee (1984); cf. Sioros & Guedes,
+  *On Measuring Syncopation to Drive an Interactive Music System*, ISMIR 2012.
+- **Interval edit distance** — melodic similarity via string edit distance; cf.
+  recent melody-similarity work such as *MelodySim* (2025).
+
+**Known roadmap (deliberately deferred, to stay additive):** the raw 32-dim
+embedding mixes features of different scales, so cosine can over-weight the
+higher-variance dimensions. Per-dimension standardization (z-scoring against a
+corpus) and an information-theoretic novelty metric (transition surprisal, i.e.
+−log P of observed interval transitions) are the next principled steps; they
+change core similarity semantics, so they belong in their own revision rather
+than bolted onto the current vector.
 
 ## Fleet & related work
 

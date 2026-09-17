@@ -89,3 +89,26 @@ so it won't destabilize the embedding.
 **Status:** Operational — tests 48 + 2 doctests green, clippy clean, fmt clean.
 **Next duty:** land the MIR analysis features (contour/chroma/syncopation) with
 citations.
+
+## Fifth Watch — Research-Grounded MIR Features
+
+**Date:** 2026-09-17
+
+Landed the scout's briefing as [`src/analysis.rs`](../src/analysis.rs): cheap,
+dependency-free, cited melody-analysis features, all *additive* (the 32-dim
+embedding and jam loop are untouched):
+- `Phrase::parsons_code` (transposition-invariant U/D/R contour),
+- `Phrase::huron_contour` (9-type first/mean/last classification),
+- `Phrase::pitch_class_histogram` (12-bin chroma),
+- `Phrase::syncopation` (an LHL-style metric-weight off-beat index over a 16th grid),
+- `Phrase::interval_edit_similarity` (Levenshtein on interval strings — complements cosine).
+
+8 tests. README gained a "Prior art & design notes" section with citations
+(Parsons 1975, Huron 1996, LHL 1984 / Sioros 2012, jSymbolic, MelodySim) and an
+honest roadmap: per-dimension standardization and transition-surprisal novelty
+are deferred because they change core similarity semantics — they belong in a
+dedicated embedding revision, not bolted on.
+
+**Status:** Operational — tests 56 + 2 doctests green, clippy clean, fmt clean.
+**Next duty:** an embedding v2 that standardizes dimensions and folds in the best
+of the analysis features — a deliberate, breaking revision.
