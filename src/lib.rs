@@ -541,9 +541,27 @@ impl MusicianPersona {
 
     /// Generate a response phrase based on what was "heard" and what works.
     /// This is where the persona's soul emerges — it doesn't copy, it responds.
-    pub fn respond_to(&mut self, heard: &Phrase, _context: &str) -> PhraseResponse {
-        let heard_embedding = MusicEmbedding::from_phrase(heard);
-        let nearest = self.vector_db.nearest_k(&heard_embedding, 5);
+    pub fn respond_to(&mut self, heard: &Phrase, context: &str) -> PhraseResponse {
+        self.respond_to_embedding(
+            &MusicEmbedding::from_phrase(heard),
+            heard.len() as u64,
+            context,
+        )
+    }
+
+    /// Respond to a heard *embedding* directly, rather than a full phrase.
+    ///
+    /// This is what [`respond_to`](Self::respond_to) is built on, and it is what
+    /// makes call-and-response chains possible: one persona's `response_shape`
+    /// (an embedding, not a phrase) can be handed straight to the next persona as
+    /// the thing it "hears". `heard_notes` is only used for play-count telemetry.
+    pub fn respond_to_embedding(
+        &mut self,
+        heard_embedding: &MusicEmbedding,
+        heard_notes: u64,
+        _context: &str,
+    ) -> PhraseResponse {
+        let nearest = self.vector_db.nearest_k(heard_embedding, 5);
 
         // Blend the nearest patterns' embeddings to create a response shape
         let mut response_embedding = MusicEmbedding::zero();
@@ -566,7 +584,7 @@ impl MusicianPersona {
         // The more evolved, the more the persona can deviate
 
         self.jam_count += 1;
-        self.total_notes_played += heard.len() as u64;
+        self.total_notes_played += heard_notes;
 
         // Check if the soul should be named
         if self.soul_name.is_none() && self.vector_db.evolved_count() > 10 {
@@ -585,6 +603,72 @@ impl MusicianPersona {
             evolution_level: evolution,
             jam_number: self.jam_count,
             soul_active: self.soul_name.is_some(),
+        }
+    }
+
+    /// Explain *why* the persona would respond to `heard` the way it does — a
+    /// "ledger of cause" over its own patterns.
+    ///
+    /// Non-mutating: this inspects the same selection [`respond_to`] uses (the
+    /// five nearest patterns, blended by confidence) and returns which patterns
+    /// drive the response, how strongly, and a plain-English summary. It is the
+    /// music-domain version of the fleet's `explain()` affordance — the same
+    /// "why did this fire" narration Scrapcraft offers over its decision VM.
+    pub fn explain_response(&self, heard: &Phrase) -> ResponseExplanation {
+        let heard_embedding = MusicEmbedding::from_phrase(heard);
+        let nearest = self.vector_db.nearest_k(&heard_embedding, 5);
+        let total_conf: f32 = nearest.iter().map(|p| p.confidence()).sum();
+
+        let contributions: Vec<Contribution> = nearest
+            .iter()
+            .map(|p| {
+                let weight = if total_conf > 0.0 {
+                    p.confidence() / total_conf
+                } else if nearest.is_empty() {
+                    0.0
+                } else {
+                    1.0 / nearest.len() as f32
+                };
+                Contribution {
+                    source_phrase: p.source_phrase.clone(),
+                    similarity: heard_embedding.similarity(&p.embedding),
+                    confidence: p.confidence(),
+                    generation: p.generation,
+                    weight,
+                }
+            })
+            .collect();
+
+        let evolution_level = self.vector_db.evolution_ratio();
+        let heard_summary = describe_phrase(heard);
+        let narrative = if contributions.is_empty() {
+            format!(
+                "{} has no patterns yet, so it can only fall silent — nothing to draw on.",
+                self.name
+            )
+        } else {
+            let top = &contributions[0];
+            format!(
+                "Responding to {}. {} draws mostly on '{}' ({:.0}% match, confidence {:.2}, gen {}) \
+                 and {} other{}; {:.0}% of this voice is self-evolved.",
+                heard_summary,
+                self.name,
+                top.source_phrase,
+                top.similarity * 100.0,
+                top.confidence,
+                top.generation,
+                contributions.len() - 1,
+                if contributions.len() == 2 { "" } else { "s" },
+                evolution_level * 100.0,
+            )
+        };
+
+        ResponseExplanation {
+            persona_name: self.name.clone(),
+            heard_summary,
+            contributions,
+            evolution_level,
+            narrative,
         }
     }
 
@@ -673,6 +757,61 @@ pub struct PhraseResponse {
     pub soul_active: bool,
 }
 
+/// One pattern's contribution to a response — part of a [`ResponseExplanation`].
+#[derive(Debug, Clone)]
+pub struct Contribution {
+    /// Where the driving pattern came from.
+    pub source_phrase: String,
+    /// Cosine similarity of the heard phrase to this pattern (0.0–1.0).
+    pub similarity: f32,
+    /// The pattern's confidence (success rate).
+    pub confidence: f32,
+    /// 0 = learned from MIDI, 1+ = self-evolved.
+    pub generation: u32,
+    /// This pattern's share of the blended response (weights sum to ~1.0).
+    pub weight: f32,
+}
+
+/// A plain-English + structured account of *why* a persona responds as it does.
+///
+/// Returned by [`MusicianPersona::explain_response`] — the "ledger of cause".
+#[derive(Debug, Clone)]
+pub struct ResponseExplanation {
+    pub persona_name: String,
+    /// A short human description of the phrase being answered.
+    pub heard_summary: String,
+    /// The patterns driving the response, most-influential first.
+    pub contributions: Vec<Contribution>,
+    /// How much of the persona's library is self-evolved (0.0–1.0).
+    pub evolution_level: f32,
+    /// A one-sentence narration of the decision.
+    pub narrative: String,
+}
+
+/// A short human-readable description of a phrase (used in explanations).
+fn describe_phrase(p: &Phrase) -> String {
+    if p.is_empty() {
+        return "silence".to_string();
+    }
+    let density = if p.rest_ratio() > 0.4 {
+        "sparse"
+    } else if p.len() >= 8 {
+        "dense"
+    } else {
+        "flowing"
+    };
+    let range = match p.register_span() {
+        0..=6 => "narrow",
+        7..=16 => "mid-range",
+        _ => "wide-range",
+    };
+    format!(
+        "a {density}, {range} phrase ({} notes, {:.0}% rest)",
+        p.len(),
+        p.rest_ratio() * 100.0
+    )
+}
+
 // ── Jam Session ───────────────────────────────────────────────────
 
 /// A jam session between multiple personas.
@@ -701,15 +840,46 @@ impl JamSession {
         }
     }
 
-    /// Run one round of the jam — each persona responds to a seed phrase.
+    /// Run one round of the jam — every persona responds to the same seed phrase.
     pub fn round(&mut self, seed: &Phrase) -> &JamRound {
         let mut responses = Vec::new();
         for persona in &mut self.personas {
             let response = persona.respond_to(seed, &self.context);
             responses.push(response);
         }
+        let round = self.score_and_learn(responses);
+        self.rounds.push(round);
+        self.rounds.last_mut().unwrap()
+    }
 
-        // Evaluate harmony — how similar are the response embeddings?
+    /// Run one **call-and-response** round: the first persona answers the seed,
+    /// the next answers *that answer*, and so on down the line.
+    ///
+    /// Unlike [`round`](Self::round), where everyone reacts to the same prompt,
+    /// this passes each persona's `response_shape` (an embedding) to the next as
+    /// the thing it hears — a musical conversation, not a chorus. Each response's
+    /// `similarity_to_input` is measured against the voice it answered, so
+    /// `surprise` captures how far the line travels as it moves down the chain.
+    pub fn round_call_response(&mut self, seed: &Phrase) -> &JamRound {
+        let mut heard = MusicEmbedding::from_phrase(seed);
+        let mut heard_notes = seed.len() as u64;
+        let mut responses = Vec::new();
+        for persona in &mut self.personas {
+            let response = persona.respond_to_embedding(&heard, heard_notes, &self.context);
+            heard = response.response_shape.clone(); // the next voice hears this
+            heard_notes = heard_notes.max(1);
+            responses.push(response);
+        }
+        let round = self.score_and_learn(responses);
+        self.rounds.push(round);
+        self.rounds.last_mut().unwrap()
+    }
+
+    /// Score a set of responses (harmony + surprise → productive) and let each
+    /// persona learn from the outcome. Shared by [`round`](Self::round) and
+    /// [`round_call_response`](Self::round_call_response).
+    fn score_and_learn(&mut self, responses: Vec<PhraseResponse>) -> JamRound {
+        // Harmony — how similar are the response embeddings to each other?
         let harmony = if responses.len() > 1 {
             let mut sim_sum = 0.0f32;
             let mut count = 0;
@@ -730,8 +900,7 @@ impl JamSession {
             0.5
         };
 
-        // Surprise — how different is the average response from the input?
-        let _seed_embedding = MusicEmbedding::from_phrase(seed);
+        // Surprise — how far each response departs from what it answered.
         let surprise: f32 = responses
             .iter()
             .map(|r| 1.0 - r.similarity_to_input)
@@ -740,22 +909,19 @@ impl JamSession {
 
         let productive = harmony > 0.3 && surprise > 0.2;
 
-        // Each persona learns from the outcome
+        // Each persona learns from the outcome.
         for persona in &mut self.personas {
-            // Find this persona's response
             if let Some(resp) = responses.iter().find(|r| r.persona_name == persona.name) {
                 persona.learn_from_jam(resp, productive);
             }
         }
 
-        let round = JamRound {
+        JamRound {
             responses,
             harmony_score: harmony,
             surprise_score: surprise,
             productive,
-        };
-        self.rounds.push(round);
-        self.rounds.last_mut().unwrap()
+        }
     }
 
     /// The session's overall harmony — are the personas finding common ground?
@@ -1302,5 +1468,94 @@ mod tests {
         let persona = MusicianPersona::new("Empty", "silence");
         let id = persona.identity();
         assert_eq!(id.identity_strength(), 0.0);
+    }
+
+    #[test]
+    fn respond_to_matches_embedding_variant() {
+        // The phrase and embedding entry points must behave identically.
+        let mut a = MusicianPersona::new("A", "sax");
+        let mut b = a.clone();
+        for i in 0..4 {
+            let mut p = coltrane_phrase();
+            p.source = format!("s{i}");
+            a.digest_phrase(&p, "inf");
+            b.digest_phrase(&p, "inf");
+        }
+        let seed = coltrane_phrase();
+        let r1 = a.respond_to(&seed, "ctx");
+        let r2 = b.respond_to_embedding(
+            &MusicEmbedding::from_phrase(&seed),
+            seed.len() as u64,
+            "ctx",
+        );
+        assert_eq!(r1.based_on, r2.based_on);
+        assert!((r1.similarity_to_input - r2.similarity_to_input).abs() < 1e-6);
+        assert_eq!(a.total_notes_played, b.total_notes_played);
+    }
+
+    #[test]
+    fn explain_response_names_drivers() {
+        let mut miles = MusicianPersona::new("Miles", "trumpet");
+        for i in 0..5 {
+            let mut p = miles_phrase();
+            p.source = format!("chorus{i}");
+            miles.digest_phrase(&p, "Miles Davis");
+        }
+        let exp = miles.explain_response(&miles_phrase());
+        assert_eq!(exp.persona_name, "Miles");
+        assert!(!exp.contributions.is_empty());
+        assert!(exp.contributions.len() <= 5);
+        // Weights should sum to ~1.0 (all patterns untested → equal-ish shares).
+        let wsum: f32 = exp.contributions.iter().map(|c| c.weight).sum();
+        assert!((wsum - 1.0).abs() < 0.01, "weights sum to {wsum}");
+        assert!(exp.narrative.contains("Miles"));
+        // explain is non-mutating.
+        assert_eq!(miles.jam_count, 0);
+    }
+
+    #[test]
+    fn explain_response_on_empty_persona_is_graceful() {
+        let empty = MusicianPersona::new("Nobody", "silence");
+        let exp = empty.explain_response(&miles_phrase());
+        assert!(exp.contributions.is_empty());
+        assert!(exp.narrative.contains("no patterns"));
+    }
+
+    #[test]
+    fn call_response_round_runs_the_chain() {
+        let mut a = MusicianPersona::new("A", "trumpet");
+        let mut b = MusicianPersona::new("B", "sax");
+        let mut c = MusicianPersona::new("C", "piano");
+        for i in 0..4 {
+            let mut m = miles_phrase();
+            m.source = format!("a{i}");
+            a.digest_phrase(&m, "x");
+            let mut t = coltrane_phrase();
+            t.source = format!("b{i}");
+            b.digest_phrase(&t, "y");
+            let mut k = monk_phrase();
+            k.source = format!("c{i}");
+            c.digest_phrase(&k, "z");
+        }
+        let mut jam = JamSession::new(vec![a, b, c], "conversation");
+        let round = jam.round_call_response(&miles_phrase());
+        assert_eq!(round.responses.len(), 3);
+        // Each persona played exactly once.
+        assert!(jam.personas.iter().all(|p| p.jam_count == 1));
+        assert_eq!(jam.rounds.len(), 1);
+    }
+
+    #[test]
+    fn describe_phrase_reads_sensibly() {
+        assert_eq!(
+            describe_phrase(&Phrase {
+                events: vec![],
+                source: "".into(),
+                instrument: "".into()
+            }),
+            "silence"
+        );
+        let d = describe_phrase(&coltrane_phrase());
+        assert!(d.contains("notes"));
     }
 }

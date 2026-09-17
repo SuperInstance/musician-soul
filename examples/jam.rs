@@ -244,6 +244,42 @@ fn main() {
             .count()
     );
 
+    // ── 6. Explain, and converse ─────────────────────────────────────
+    bar();
+    println!("6. Why did it play that? (the ledger of cause)\n");
+    // Ask the first persona to explain how it would answer a Coltrane phrase.
+    let miles2 = &jam.personas[0];
+    let exp = miles2.explain_response(&coltrane_phrase("probe"));
+    println!("   {}", exp.narrative);
+    for c in exp.contributions.iter().take(3) {
+        println!(
+            "     • {:<16} match {:>4.0}%  conf {:.2}  gen {}  weight {:.0}%",
+            c.source_phrase,
+            c.similarity * 100.0,
+            c.confidence,
+            c.generation,
+            c.weight * 100.0
+        );
+    }
+
+    println!("\n   Call-and-response — each voice answers the one before it:\n");
+    let mut convo = JamSession::new(
+        vec![
+            jam.personas[0].clone(),
+            jam.personas[1].clone(),
+            jam.personas[2].clone(),
+        ],
+        "trading_fours",
+    );
+    let round = convo.round_call_response(&miles_phrase("call"));
+    for r in &round.responses {
+        println!(
+            "     {:<6} answered with divergence {:.2} from the voice before it",
+            r.persona_name,
+            1.0 - r.similarity_to_input
+        );
+    }
+
     bar();
     println!("Done. Re-run it — the arc is deterministic, so the numbers repeat.");
     println!("Change the influences, the phrases, or the round count and watch");

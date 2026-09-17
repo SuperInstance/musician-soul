@@ -67,7 +67,12 @@ coordination note offered `explain()` and `cell.replay()`:
    earned confidence. It is a small, concrete reference for a confidence-weighted
    eviction policy — a Murmur-free GC that runs on pure local signal.
 
-2. **Two-axis identity.** Most "how evolved is it?" questions collapse to one
+2. **A `explain()` in the music domain.** `MusicianPersona::explain_response`
+   returns a ledger of cause — which patterns drove a response, how strongly, and
+   why — the same affordance the Scrapcraft coordination note proposed for the
+   cell model, now realized here for anyone to copy.
+
+3. **Two-axis identity.** Most "how evolved is it?" questions collapse to one
    number. musician-soul keeps two that can disagree on purpose:
    `soul_percentage()` (how much is *self-generated*) and `soul_print()` (the
    centroid of what has *reliably worked*). Exploration and consolidation are

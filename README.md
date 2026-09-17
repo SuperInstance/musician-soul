@@ -195,6 +195,21 @@ One more property worth knowing: **a persona jamming *alone* on identical
 material never evolves** — nothing surprises it, so nothing is reinforced. Soul
 emerges from *diversity*. Put different voices in the room.
 
+## Explain, and converse
+
+Two affordances make the personas legible and interactive:
+
+- **`explain_response(phrase)` — the ledger of cause.** A non-mutating query that
+  returns *why* a persona would answer as it does: which stored patterns drive
+  the response, each one's similarity/confidence/generation/weight, and a
+  one-sentence narration. This is the music-domain version of the fleet's
+  `explain()` affordance (the same "why did this fire" narration Scrapcraft
+  offers over its decision VM).
+- **`round_call_response(seed)` — a conversation, not a chorus.** Where `round`
+  has everyone answer the same seed, this passes each persona's response to the
+  next as the thing it hears — so a line travels and mutates down the chain, and
+  `surprise` measures how far it gets. See section 6 of `cargo run --example jam`.
+
 ## API reference
 
 ### MIDI primitives
@@ -238,13 +253,16 @@ emerges from *diversity*. Put different voices in the room.
 - `.add_influence(name, weight)` — weighted influence (clamped 0.0–1.0)
 - `.digest_phrase(phrase, influence)` — learn from MIDI
 - `.respond_to(phrase, context)` → `PhraseResponse` — generate a response
+- `.respond_to_embedding(embedding, notes, context)` → `PhraseResponse` — respond to a raw embedding (enables call-and-response chains)
+- `.explain_response(phrase)` → `ResponseExplanation` — the *ledger of cause*: which patterns drive the response, how strongly, and why (non-mutating)
 - `.learn_from_jam(response, success)` — reinforce/penalize the patterns behind a response
 - `.soul_percentage()` — self-generated fraction × 100
 - `.identity()` — the persona's unique embedding
 
 ### JamSession
 - `new(personas, context)` — multi-persona jam
-- `.round(seed)` → `&JamRound` — one round of jamming
+- `.round(seed)` → `&JamRound` — one round: everyone answers the same seed
+- `.round_call_response(seed)` → `&JamRound` — a *conversation*: each persona answers the previous voice
 - `.session_harmony()` — average harmony across rounds
 - `.productive_rounds()` — count of productive rounds
 - `.soul_report()` — each persona's soul percentage
