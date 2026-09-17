@@ -63,3 +63,29 @@ a file you name or a synthesized demo clip. Also derived `PartialEq`/`Eq` on
 
 **Status:** Operational — tests 43 + 2 doctests green, clippy clean, fmt clean.
 **Next duty:** the tensor seam — `From<tensor_midi::Clip>` for in-memory digestion.
+
+## Fourth Watch — Explain & Converse (thinkers + scouts)
+
+**Date:** 2026-09-17
+
+Dispatched a research scout (cheaper model) to survey current MIR / musical-agent
+work, then shipped two features it and the fleet motif pointed to:
+
+- **`explain_response`** — a non-mutating "ledger of cause": which patterns drive
+  a response, with similarity/confidence/generation/weight and a plain-English
+  narration. The music-domain realization of the fleet's `explain()` affordance.
+- **Call-and-response jamming** — `JamSession::round_call_response` passes each
+  persona's response to the next as the thing it hears (a conversation, not a
+  chorus). Backed by a new `respond_to_embedding` that `respond_to` now delegates
+  to, and a shared `score_and_learn` helper. Added `Contribution` /
+  `ResponseExplanation` types and a `describe_phrase` narrator. 5 new tests;
+  example gains sections 6.
+
+The scout's briefing (Parsons/Huron contour, pitch-class chroma, LHL syncopation,
+per-dimension normalization, transition-surprisal novelty — all cheap and
+dependency-free) is the next watch: a research-grounded MIR feature set, additive
+so it won't destabilize the embedding.
+
+**Status:** Operational — tests 48 + 2 doctests green, clippy clean, fmt clean.
+**Next duty:** land the MIR analysis features (contour/chroma/syncopation) with
+citations.
