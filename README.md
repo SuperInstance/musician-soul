@@ -236,6 +236,17 @@ phrase (they don't change the embedding — they're additive). See
 - `.syncopation()` → `f32` — an LHL-style off-beat/metric-weight index
 - `.interval_edit_similarity(other)` → `f32` — melodic similarity by edit distance on interval strings (complements cosine)
 
+### The meta layer (`meta` module)
+An abstraction approximator — a phrase as the *spline it traces through
+abstraction space*, read by its geometry rather than its coordinates. See
+**[META.md](META.md)** for the why.
+- `Phrase::embedding_trajectory(window)` → `Vec<MusicEmbedding>` — the phrase's path, not its average
+- `Phrase::reality_spline(window)` → `AbstractionSpline` — a Catmull-Rom curve through that path
+- `AbstractionSpline::{arc_length, bending_energy, tangent, sample, resample}` — the gesture's differential geometry
+- `meta::meta_similarity(a, b, window)` → `f32` — compares two phrases as *gestures* (curve-to-curve)
+- `MusicianPersona::soul_spline()` → `AbstractionSpline` — identity as a *trajectory of becoming*, not a centroid
+- `MusicianPersona::vibe_velocity()` → `f32` — the `d_mu` speed of that identity's motion (the fleet's Vibe primitive, now first-class)
+
 ### MusicEmbedding
 - `MusicEmbedding::from_phrase(phrase)` — extract the 32-dim embedding
 - `MusicEmbedding::zero()` — zero vector
@@ -352,6 +363,19 @@ artistic taste. The `soul_print()` isn't a metaphor — it's a concrete vector
 representing what this persona has independently discovered works. The generation
 counter is the key mechanism: Gen-0 is imitation, Gen-1+ is invention, and when a
 persona has enough Gen-1+ patterns it "names its soul."
+
+## The meta layer — below the math
+
+Aggregate embeddings treat a phrase as a *point* and compare points; that's the
+usual math. The [`meta`](src/meta.rs) module goes below it: a phrase is the
+**spline it traces through abstraction space**, and we read the *gesture* — how
+far it travels (`arc_length`), how hard it turns (`bending_energy`), and which way
+it moves (`tangent`, a velocity). A rising scale and its exact reversal have
+nearly identical 32-vectors (cosine ≈ 0.78) but visibly different motion; the meta
+layer sees the difference. A persona's identity becomes a *trajectory* rather than
+a centroid, and its `vibe_velocity()` is the speed of its becoming — the fleet's
+Vibe `d_mu`, made first-class. It's pure-Rust differential geometry and it runs:
+`cargo run --example meta`. The full argument is in **[META.md](META.md)**.
 
 ## Prior art & design notes
 

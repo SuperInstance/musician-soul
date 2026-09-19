@@ -73,6 +73,10 @@ pub mod midi;
 /// similarity) — see [`analysis`].
 pub mod analysis;
 
+/// The meta layer — an abstraction approximator: phrases as splines through
+/// abstraction space, read by their geometry. See [`meta`].
+pub mod meta;
+
 // ── Musical Types ─────────────────────────────────────────────────
 
 /// A MIDI pitch (0-127) with semantic meaning.

@@ -112,3 +112,30 @@ dedicated embedding revision, not bolted on.
 **Status:** Operational — tests 56 + 2 doctests green, clippy clean, fmt clean.
 **Next duty:** an embedding v2 that standardizes dimensions and folds in the best
 of the analysis features — a deliberate, breaking revision.
+
+## Sixth Watch — The Meta Layer (below the math)
+
+**Date:** 2026-09-19
+
+The captain asked to get *below* the math as they know it — a tensor is a
+function approximator; we are an abstraction approximator-engine — and to put it
+into meta, not just talk. Built [`src/meta.rs`](../src/meta.rs) and
+[META.md](../META.md):
+
+- A phrase is a **path**, not a point: `Phrase::embedding_trajectory` (windowed).
+- `AbstractionSpline` fits a Catmull-Rom curve — the *spline of reality* — through
+  that path and exposes its geometry: `arc_length` (travel), `bending_energy`
+  (pure turning, zero for a straight line at any speed), `tangent` (a velocity).
+- `meta::meta_similarity` compares phrases as gestures (curve-to-curve): a rising
+  scale and its reversal read cosine ≈ 0.78 but different motion.
+- `MusicianPersona::soul_spline` makes identity a *trajectory of becoming*, and
+  `vibe_velocity` reads its leading-edge tangent — the first-class Vibe `d_mu`
+  FLEET.md said we lacked. That gap is now closed (FLEET.md updated).
+
+9 meta tests; `examples/meta.rs` makes the geometry visible; README gains a "meta
+layer" section. Differential geometry of musical abstraction, pure Rust, and it
+runs.
+
+**Status:** Operational — tests 65 + 2 doctests green, clippy clean, fmt clean.
+**Next duty:** arc-length reparameterization of the spline; and still, the
+embedding v2 that the meta layer would ride on top of.
