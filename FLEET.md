@@ -86,8 +86,11 @@ coordination note offered `explain()` and `cell.replay()`:
   reinforcement *cost* something.
 - **Graph** is implicit (kNN per query), not a materialized dependency graph that
   recomputes reactively. quilt's graph is the real thing; this is a snapshot.
-- **Vibe** has no velocity. [elephant](https://github.com/SuperInstance/elephant)
-  defines Vibe as a `d_mu`; here it is only observable as after-the-fact drift.
+- **Vibe** *now has a velocity.* [elephant](https://github.com/SuperInstance/elephant)
+  defines Vibe as a `d_mu`; the [meta layer](META.md) makes a persona's identity a
+  spline (`soul_spline`) whose leading-edge tangent is that velocity —
+  `MusicianPersona::vibe_velocity()`. What was after-the-fact drift is now a
+  first-class number read from the geometry of becoming.
 
 ## Sibling in spirit: Scrapcraft
 
