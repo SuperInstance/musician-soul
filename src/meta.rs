@@ -17,16 +17,27 @@
 //! - [`Phrase::embedding_trajectory`] slides a window across a phrase to get a
 //!   *sequence* of embeddings — the path, not the average.
 //! - [`AbstractionSpline`] fits a Catmull-Rom curve through that path and exposes
-//!   its differential geometry ([`arc_length`](AbstractionSpline::arc_length),
-//!   [`bending_energy`](AbstractionSpline::bending_energy),
-//!   [`tangent`](AbstractionSpline::tangent)).
+//!   its differential geometry, order by order:
+//!   - **1st** — [`tangent`](AbstractionSpline::tangent): the direction of
+//!     motion (a velocity, the `d_mu`), and
+//!     [`arc_length`](AbstractionSpline::arc_length): how far it travels.
+//!   - **2nd** — [`bending_energy`](AbstractionSpline::bending_energy):
+//!     curvature, how hard the gesture turns *within a plane*.
+//!   - **3rd** — [`twist_energy`](AbstractionSpline::twist_energy): torsion, how
+//!     much it turns *out of* that plane, into a fresh dimension of abstraction
+//!     (with [`planarity`](AbstractionSpline::planarity) its scale-free inverse).
+//!     This is the fleet's *the property is in the twist* — new structure lives
+//!     in the offset that leaves the current plane — made a number over notes.
 //! - [`meta_similarity`] compares two phrases as *gestures* (curve-to-curve),
-//!   which sees a difference in motion that cosine-on-aggregates and
-//!   edit-distance-on-intervals both miss.
+//!   and [`gesture_distance`] compares only their *directions of motion* — scale-
+//!   and offset-invariant, so it is comparable across fleet nodes — both seeing
+//!   a difference cosine-on-aggregates and edit-distance-on-intervals miss.
 //! - [`MusicianPersona::soul_spline`] makes a persona's identity a *trajectory of
-//!   becoming* rather than a single centroid, and
+//!   becoming* rather than a single centroid;
 //!   [`MusicianPersona::vibe_velocity`] reads the tangent at its leading edge —
-//!   the first-class `d_mu` "Vibe velocity" that [`FLEET.md`] flagged as missing.
+//!   the first-class `d_mu` "Vibe velocity" that [`FLEET.md`] flagged as missing —
+//!   and [`MusicianPersona::soul_twist`] reads whether that becoming keeps
+//!   opening new dimensions of the self or refines within one.
 //!
 //! [`FLEET.md`]: https://github.com/SuperInstance/musician-soul/blob/master/FLEET.md
 //!
@@ -143,6 +154,80 @@ impl AbstractionSpline {
         energy
     }
 
+    /// Total **twist** of the gesture — its third-order structure: the turning
+    /// that leaves the *osculating plane*.
+    ///
+    /// [`bending_energy`](Self::bending_energy) is curvature — how much the
+    /// gesture turns *within* a plane. Twist is torsion — how much it turns
+    /// *out* of that plane, into a fresh direction of abstraction space. A
+    /// perfectly planar gesture (an arch, or a zig-zag confined to two axes)
+    /// has **zero twist at any curvature**; a helix — a line that keeps opening
+    /// a new dimension as it turns — has positive twist.
+    ///
+    /// Per interior vertex the contribution is `sin θ`, where `θ` is the angle
+    /// between the next step and the osculating plane of the previous two
+    /// steps, so each vertex contributes in `[0, 1]` and a straight or planar
+    /// stretch contributes 0. Summed over the curve.
+    ///
+    /// This is the crate's reading of the fleet's central law — *the property
+    /// is in the twist* ([twist-engine]): new structure lives in the deliberate
+    /// offset that takes a gesture out of the plane it was moving in. Curvature
+    /// rearranges what is already there; twist reaches a direction that was not.
+    ///
+    /// [twist-engine]: https://github.com/SuperInstance/twist-engine
+    pub fn twist_energy(&self) -> f32 {
+        let pts = self.resample(self.resolution());
+        if pts.len() < 4 {
+            return 0.0;
+        }
+        let mut energy = 0.0;
+        for w in pts.windows(4) {
+            let s1 = sub(&w[1], &w[0]);
+            let s2 = sub(&w[2], &w[1]);
+            let s3 = sub(&w[3], &w[2]);
+            // Orthonormal basis {e1, e2} of the osculating plane span(s1, s2).
+            let n1 = norm(&s1);
+            if n1 < 1e-9 {
+                continue;
+            }
+            let e1 = scale(&s1, 1.0 / n1);
+            let perp = sub(&s2, &scale(&e1, dot(&s2, &e1))); // s2 ⟂ e1
+            let np = norm(&perp);
+            if np < 1e-9 {
+                continue; // s1 ∥ s2: no plane to leave — nothing to twist out of
+            }
+            let e2 = scale(&perp, 1.0 / np);
+            // The part of the next unit step that lies outside that plane.
+            let n3 = norm(&s3);
+            if n3 < 1e-9 {
+                continue;
+            }
+            let d3 = scale(&s3, 1.0 / n3);
+            let c1 = dot(&d3, &e1);
+            let c2 = dot(&d3, &e2);
+            let mut out = d3;
+            for k in 0..DIM {
+                out[k] -= c1 * e1[k] + c2 * e2[k];
+            }
+            energy += norm(&out).min(1.0);
+        }
+        energy
+    }
+
+    /// **Planarity** of the gesture in `[0, 1]`: `1.0` for a curve that lives in
+    /// a single plane (all curvature, no twist), falling toward `0.0` as more of
+    /// its turning leaves the plane. `1.0` for a curve too short to twist. This
+    /// is `twist_energy` normalized by the number of interior vertices and
+    /// inverted — a scale-free "how flat is this gesture."
+    pub fn planarity(&self) -> f32 {
+        let n = self.resample(self.resolution()).len();
+        let vertices = n.saturating_sub(3); // windows(4)
+        if vertices == 0 {
+            return 1.0;
+        }
+        (1.0 - self.twist_energy() / vertices as f32).clamp(0.0, 1.0)
+    }
+
     /// Unit tangent (direction of motion) at global parameter `t` — a velocity
     /// through abstraction space. Zero vector if the curve is a single point.
     pub fn tangent(&self, t: f32) -> Point {
@@ -248,6 +333,19 @@ impl MusicianPersona {
             _ => 0.0,
         }
     }
+
+    /// The persona's **soul twist**: the third-order structure of its becoming —
+    /// how much its identity keeps turning *out of the plane* it was developing
+    /// in, rather than refining within one. A persona that deepens along a single
+    /// stylistic axis has low soul twist; one that keeps opening genuinely new
+    /// dimensions of itself has high soul twist. 0.0 before it has enough
+    /// confident patterns to have a plane to leave.
+    ///
+    /// This is [`AbstractionSpline::twist_energy`] read over the soul spline —
+    /// the fleet's "the property is in the twist" applied to a persona's growth.
+    pub fn soul_twist(&self) -> f32 {
+        self.soul_spline().twist_energy()
+    }
 }
 
 /// Gesture similarity: compare two phrases as *curves*, not points.
@@ -279,6 +377,66 @@ pub fn meta_similarity(a: &Phrase, b: &Phrase, window: usize) -> f32 {
     }
 }
 
+/// **Gesture distance**: how differently two phrases *move*, ignoring where
+/// they are and how big they are.
+///
+/// [`meta_similarity`] compares curves point-for-point, so it still feels an
+/// offset or a scale difference between two otherwise-identical motions. This
+/// compares only the *directions of travel* along each curve — both splines are
+/// resampled to a common length, reduced to unit step-directions, and scored by
+/// mean angular difference (`1 − cos`). It is therefore invariant to translation
+/// and to uniform scale, which is exactly what a comparison *across nodes*
+/// (musician-soul phrases vs. elephant rooms vs. tensor-midi clips) needs: the
+/// absolute coordinates differ, the *shape of the going* is comparable.
+///
+/// Range `0.0` (identical motion) to `2.0` (opposed at every step). A gesture's
+/// distance to itself is 0; the function is symmetric.
+pub fn gesture_distance(a: &Phrase, b: &Phrase, window: usize) -> f32 {
+    let sa = a.reality_spline(window);
+    let sb = b.reality_spline(window);
+    if sa.is_empty() && sb.is_empty() {
+        return 0.0;
+    }
+    if sa.is_empty() || sb.is_empty() {
+        return 2.0;
+    }
+    const N: usize = 24;
+    let pa = sa.resample(N);
+    let pb = sb.resample(N);
+    let dirs = |pts: &[Point]| -> Vec<Point> {
+        pts.windows(2)
+            .map(|w| {
+                let d = sub(&w[1], &w[0]);
+                let n = norm(&d);
+                if n > 1e-9 {
+                    scale(&d, 1.0 / n)
+                } else {
+                    [0.0; DIM]
+                }
+            })
+            .collect()
+    };
+    let da = dirs(&pa);
+    let db = dirs(&pb);
+    let mut sum = 0.0f32;
+    let mut count = 0usize;
+    for (x, y) in da.iter().zip(db.iter()) {
+        // Zero-direction steps (a momentarily still gesture) contribute a
+        // neutral 1.0 rather than a false "aligned" 0.0.
+        if norm(x) < 1e-9 || norm(y) < 1e-9 {
+            sum += 1.0;
+        } else {
+            sum += 1.0 - cosine(x, y);
+        }
+        count += 1;
+    }
+    if count == 0 {
+        0.0
+    } else {
+        (sum / count as f32).clamp(0.0, 2.0)
+    }
+}
+
 // ── vector helpers (kept private; dependency-free) ─────────────────
 
 /// Uniform Catmull-Rom interpolation of one segment, per dimension.
@@ -302,6 +460,18 @@ fn sub(a: &Point, b: &Point) -> Point {
         out[d] = a[d] - b[d];
     }
     out
+}
+
+fn scale(a: &Point, k: f32) -> Point {
+    let mut out = [0.0f32; DIM];
+    for d in 0..DIM {
+        out[d] = a[d] * k;
+    }
+    out
+}
+
+fn dot(a: &Point, b: &Point) -> f32 {
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
 fn dist(a: &Point, b: &Point) -> f32 {
@@ -452,6 +622,132 @@ mod tests {
     }
 
     #[test]
+    fn planar_curve_has_no_twist_but_a_helix_does() {
+        // A curve confined to the (dim0, dim1) plane: curves hard, never leaves
+        // the plane → zero torsion regardless of how much it bends.
+        let planar: Vec<Point> = (0..8)
+            .map(|i| {
+                let a = i as f32 * 0.6;
+                let mut p = [0.0; DIM];
+                p[0] = a.cos();
+                p[1] = a.sin();
+                p
+            })
+            .collect();
+        // A helix: the same circular turning, but marching steadily along dim2 —
+        // each turn opens the third dimension → positive twist.
+        let helix: Vec<Point> = (0..8)
+            .map(|i| {
+                let a = i as f32 * 0.6;
+                let mut p = [0.0; DIM];
+                p[0] = a.cos();
+                p[1] = a.sin();
+                p[2] = a * 0.5;
+                p
+            })
+            .collect();
+        let tp = AbstractionSpline::new(planar).twist_energy();
+        let th = AbstractionSpline::new(helix).twist_energy();
+        assert!(tp < 1e-2, "a planar curve should barely twist: {tp}");
+        assert!(th > tp, "a helix twists more than a plane: {th} vs {tp}");
+        assert!(th.is_finite());
+    }
+
+    #[test]
+    fn planarity_is_bounded_and_high_for_flat_curves() {
+        let planar: Vec<Point> = (0..8)
+            .map(|i| {
+                let a = i as f32 * 0.6;
+                let mut p = [0.0; DIM];
+                p[0] = a.cos();
+                p[1] = a.sin();
+                p
+            })
+            .collect();
+        let pl = AbstractionSpline::new(planar).planarity();
+        assert!((0.0..=1.0).contains(&pl));
+        assert!(pl > 0.95, "a planar curve reads as planar: {pl}");
+        // Too-short curves are trivially planar.
+        assert_eq!(AbstractionSpline::new(vec![[0.0; DIM]]).planarity(), 1.0);
+    }
+
+    #[test]
+    fn gesture_distance_self_zero_symmetric_and_discriminating() {
+        let rising = ph(&[60, 62, 64, 65, 67, 69, 71, 72]);
+        let arch = ph(&[60, 64, 68, 72, 68, 64, 60, 55]);
+        let d_self = gesture_distance(&rising, &rising, 3);
+        assert!(
+            d_self < 1e-3,
+            "a gesture is zero distance from itself: {d_self}"
+        );
+        // Symmetric.
+        let ab = gesture_distance(&rising, &arch, 3);
+        let ba = gesture_distance(&arch, &rising, 3);
+        assert!(
+            (ab - ba).abs() < 1e-4,
+            "distance is symmetric: {ab} vs {ba}"
+        );
+        // A steady climb and an arch move differently.
+        assert!(ab > d_self);
+        assert!((0.0..=2.0).contains(&ab));
+    }
+
+    #[test]
+    fn gesture_distance_ignores_scale_and_offset() {
+        // Same motion, shifted and scaled in abstraction space: directions of
+        // travel are identical, so gesture distance stays ~0 even though the
+        // raw curves sit far apart at different sizes.
+        let base: Vec<Point> = (0..6)
+            .map(|i| {
+                let a = i as f32 * 0.7;
+                let mut p = [0.0; DIM];
+                p[0] = a.cos();
+                p[1] = a.sin();
+                p
+            })
+            .collect();
+        let moved: Vec<Point> = base
+            .iter()
+            .map(|p| {
+                let mut q = scale(p, 3.0); // scale up
+                q[0] += 5.0; // and translate
+                q[1] += 5.0;
+                q
+            })
+            .collect();
+        let sa = AbstractionSpline::new(base);
+        let sb = AbstractionSpline::new(moved);
+        // Compare directions along the two splines directly.
+        const N: usize = 24;
+        let pa = sa.resample(N);
+        let pb = sb.resample(N);
+        let dir = |pts: &[Point]| -> Vec<Point> {
+            pts.windows(2)
+                .map(|w| {
+                    let d = sub(&w[1], &w[0]);
+                    let n = norm(&d);
+                    if n > 1e-9 {
+                        scale(&d, 1.0 / n)
+                    } else {
+                        [0.0; DIM]
+                    }
+                })
+                .collect()
+        };
+        let (da, db) = (dir(&pa), dir(&pb));
+        let mut worst = 0.0f32;
+        for (x, y) in da.iter().zip(db.iter()) {
+            if norm(x) > 1e-9 && norm(y) > 1e-9 {
+                worst = worst.max(1.0 - cosine(x, y));
+            }
+        }
+        assert!(
+            worst < 1e-3,
+            "scale+offset must not change the going: {worst}"
+        );
+    }
+
+    #[test]
     fn soul_spline_and_vibe_velocity() {
         let mut persona = MusicianPersona::new("Test", "sax");
         for i in 0..6 {
@@ -466,8 +762,13 @@ mod tests {
         let v = persona.vibe_velocity();
         assert!(v >= 0.0 && v.is_finite());
 
+        // Soul twist is finite, non-negative, and zero before there's a plane.
+        let tw = persona.soul_twist();
+        assert!(tw >= 0.0 && tw.is_finite());
+
         // A brand-new persona hasn't begun to move.
         let empty = MusicianPersona::new("New", "sax");
         assert_eq!(empty.vibe_velocity(), 0.0);
+        assert_eq!(empty.soul_twist(), 0.0);
     }
 }

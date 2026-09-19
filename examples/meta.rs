@@ -38,11 +38,12 @@ fn bar() {
 fn geometry(label: &str, p: &Phrase) {
     let s: AbstractionSpline = p.reality_spline(3);
     println!(
-        "  {:<10} points {:>2} | arc {:>5.2} | bending {:>5.2} | control-pts {}",
+        "  {:<10} points {:>2} | arc {:>5.2} | bending {:>5.2} | twist {:>5.2} | control-pts {}",
         label,
         p.len(),
         s.arc_length(),
         s.bending_energy(),
+        s.twist_energy(),
         s.len(),
     );
 }
@@ -106,15 +107,72 @@ fn main() {
     }
     let soul = p.soul_spline();
     println!(
-        "   soul spline: {} control points, arc {:.2}, bending {:.2}",
+        "   soul spline: {} control points, arc {:.2}, bending {:.2}, twist {:.2}",
         soul.len(),
         soul.arc_length(),
-        soul.bending_energy()
+        soul.bending_energy(),
+        soul.twist_energy()
     );
     println!(
         "   Vibe velocity (d_mu, how fast identity is moving): {:.3}",
         p.vibe_velocity()
     );
+    println!(
+        "   soul twist (does its becoming open new dimensions?): {:.3}",
+        p.soul_twist()
+    );
+
+    // The third order: curvature vs. torsion. A planar arch bends but never
+    // leaves its plane; a helix bends the same and keeps opening a new one.
+    bar();
+    println!("5. Third order — bending stays in a plane, twist leaves it:\n");
+    let planar: Vec<meta::Point> = (0..8)
+        .map(|i| {
+            let a = i as f32 * 0.6;
+            let mut pt = [0.0f32; meta::DIM];
+            pt[0] = a.cos();
+            pt[1] = a.sin();
+            pt
+        })
+        .collect();
+    let helix: Vec<meta::Point> = (0..8)
+        .map(|i| {
+            let a = i as f32 * 0.6;
+            let mut pt = [0.0f32; meta::DIM];
+            pt[0] = a.cos();
+            pt[1] = a.sin();
+            pt[2] = a * 0.5;
+            pt
+        })
+        .collect();
+    let sp = AbstractionSpline::new(planar);
+    let sh = AbstractionSpline::new(helix);
+    println!(
+        "   planar circle: bending {:.2}, twist {:.2}, planarity {:.3}",
+        sp.bending_energy(),
+        sp.twist_energy(),
+        sp.planarity()
+    );
+    println!(
+        "   helix        : bending {:.2}, twist {:.2}, planarity {:.3}",
+        sh.bending_energy(),
+        sh.twist_energy(),
+        sh.planarity()
+    );
+    println!("   → same bend, but only the helix reaches a new dimension.");
+    println!("     The property is in the twist.");
+
+    // Gesture distance: motion compared free of scale and offset.
+    bar();
+    println!("6. Gesture distance — the going, free of where and how big:\n");
+    println!(
+        "   rising↔rising {:.3}   rising↔arch {:.3}   rising↔falling {:.3}",
+        meta::gesture_distance(&rising, &rising, 3),
+        meta::gesture_distance(&rising, &arch, 3),
+        meta::gesture_distance(&rising, &falling, 3)
+    );
+    println!("   (0 = same motion, 2 = opposed; invariant to scale and offset,");
+    println!("    so it is the comparison that travels across fleet nodes.)");
 
     bar();
     println!("A tensor approximates a function. This approximates the abstraction —");

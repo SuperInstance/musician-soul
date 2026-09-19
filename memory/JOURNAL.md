@@ -162,3 +162,43 @@ the one remaining (breaking) step, left as future work.
 **Status:** Operational — tests 70 + 3 doctests green, clippy clean, fmt clean, v0.2.0.
 **Next duty:** carry the abstraction-approximator framing to tensor-midi (a JS
 sibling); arc-length reparameterization of the meta spline.
+
+## Sixth Watch — The Third Order (Twist)
+
+**Date:** 2026-09-19
+
+Went below the math again. The meta layer read a gesture to second order —
+`arc_length`/`tangent` (1st) and `bending_energy`/curvature (2nd). Curvature is
+turning *within a plane*; it cannot tell an arch from a helix, because both bend
+and only the helix leaves its plane. So I added the **third order — torsion**,
+under the fleet's own name for it: **twist**.
+
+- [`AbstractionSpline::twist_energy`](../src/meta.rs) — a discrete, N-dim
+  generalization of torsion: per interior vertex, `sin θ` where θ is the angle by
+  which the next step leaves the osculating plane of the previous two. **Zero for
+  any planar curve at any curvature; positive when the gesture opens a new
+  dimension.** The example proves it: a flat circle and a helix bend the same
+  (~0.1) but twist 0.00 vs 0.28.
+- [`AbstractionSpline::planarity`](../src/meta.rs) — the scale-free inverse.
+- [`meta::gesture_distance`](../src/meta.rs) — motion compared free of scale and
+  offset (unit directions of travel, mean angular difference, range 0–2). This is
+  the cross-node comparison elephant's `docs/GESTURE.md` flagged as missing: a
+  phrase, a room, and a clip live in different coordinate systems but their
+  *going* is now directly comparable.
+- [`MusicianPersona::soul_twist`](../src/meta.rs) — the twist of a persona's
+  *becoming*: does its identity refine along one axis, or keep opening new
+  dimensions of itself?
+
+The connection is not decoration. **twist-engine**'s whole thesis is *the
+property is in the twist — layers + deliberate offset → interference →
+emergence; no new atoms, a new angle.* Torsion is that law in abstraction space:
+new structure is not more of the same turning, it is the turning that reaches out
+of the current plane. musician-soul now speaks it over notes; quilt's `cell.twist`
+and twist-engine's five substrates speak it over lattices and permutations.
+
+4 new tests (planar-vs-helix, planarity bounds, gesture-distance
+self/symmetry/discrimination, scale+offset invariance).
+
+**Status:** Operational — tests 74 + 3 doctests green, clippy clean, fmt clean, v0.3.0.
+**Next duty:** carry `twist`/torsion onward to elephant (`VibeTrajectory`) and
+tensor-midi (`Clip`), so all three gesture-readers share the third order too.

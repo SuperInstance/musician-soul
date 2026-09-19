@@ -48,6 +48,47 @@ aggregate averages that away; the gesture keeps it.
 movement, aligned point-for-point along the spline — so it can tell a smooth arc
 from a zig-zag that a point-comparison calls the same.
 
+## The three orders of a gesture
+
+A curve carries structure at each derivative, and the meta layer now reads all
+three:
+
+| Order | Method | Reads | In one line |
+|---|---|---|---|
+| 1st | `tangent` / `arc_length` | direction & distance of travel | *where it's going, how far it's gone* |
+| 2nd | `bending_energy` | curvature — turning **within** a plane | *how hard it changes its mind* |
+| 3rd | `twist_energy` | torsion — turning **out of** that plane | *whether it reaches a new dimension* |
+
+Curvature and torsion are different animals, and the distinction is the whole
+point. A phrase can bend as hard as you like and still live in a single plane of
+abstraction — an arch, a zig-zag confined to two axes. Its `bending_energy` is
+high; its `twist_energy` is **zero**. A gesture only has twist when its turning
+*leaves the plane it was turning in* — when the next move opens a direction the
+last two moves did not span. `cargo run --example meta` shows it directly: a flat
+circle and a helix bend by almost the same amount (~0.1), but only the helix
+twists (0.00 vs 0.28).
+
+This is the crate's reading of the fleet's oldest law — **the property is in the
+twist** ([twist-engine](https://github.com/SuperInstance/twist-engine): *layers +
+deliberate offset → interference → emergence; no new atoms, a new angle*). New
+structure does not come from more of the same turning; it comes from the offset
+that reaches out of the current plane. Curvature rearranges what is already
+there; torsion touches what was not. `planarity` is the scale-free inverse — how
+flat a gesture stays — and `MusicianPersona::soul_twist()` asks it of a persona's
+*becoming*: does its identity keep refining along one axis, or keep opening
+genuinely new dimensions of itself?
+
+## Comparing motion across nodes: `gesture_distance`
+
+`meta_similarity` is offset- and scale-sensitive (it compares positions along the
+curves). `gesture_distance` strips those away: it reduces each spline to its
+**unit directions of travel** and scores the mean angular difference, so two
+identical motions at different sizes or positions read as distance ~0. That
+invariance is exactly what a comparison *between fleet nodes* needs — a
+musician-soul phrase, an elephant room, and a tensor-midi clip sit in different
+coordinate systems, but the *shape of their going* is now directly comparable.
+Range 0 (same motion) to 2 (opposed at every step); symmetric; zero to itself.
+
 ## What it gives back to the fleet
 
 The tangent of a curve is a **velocity**. So the tangent of a persona's soul
@@ -76,5 +117,12 @@ the curve it was always drawing.
 - "Abstraction space" here is the 32-dim feature space. The philosophy generalizes
   to any embedding; nothing in `meta.rs` is music-specific except where it reads a
   `Phrase`.
+- `twist_energy` is a **discrete, dimension-agnostic** generalization of torsion,
+  not the classical signed scalar (which is defined in 3-space). It measures the
+  angle by which each step leaves the osculating plane of the previous two — an
+  unsigned magnitude in `[0, 1]` per vertex — which is the meaningful reading in a
+  32-dim space where a single signed binormal does not exist. It needs ≥4 points
+  to be non-trivial, and like `bending_energy` it is measured at a fixed resample
+  resolution, so compare twists taken at the same scale.
 
 *A tensor approximates a function. We approximate the abstraction. And it runs.*
