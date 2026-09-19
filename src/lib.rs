@@ -77,6 +77,10 @@ pub mod analysis;
 /// abstraction space, read by their geometry. See [`meta`].
 pub mod meta;
 
+/// Embedding v2 — principled comparison in a standardized (whitened) space so
+/// no single high-variance dimension dominates cosine. See [`embedding_v2`].
+pub mod embedding_v2;
+
 // ── Musical Types ─────────────────────────────────────────────────
 
 /// A MIDI pitch (0-127) with semantic meaning.
