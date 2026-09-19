@@ -235,6 +235,13 @@ phrase (they don't change the embedding — they're additive). See
 - `.pitch_class_histogram()` → `[f32; 12]` — normalized chroma (tonal color)
 - `.syncopation()` → `f32` — an LHL-style off-beat/metric-weight index
 - `.interval_edit_similarity(other)` → `f32` — melodic similarity by edit distance on interval strings (complements cosine)
+- `analysis::transition_surprisal(reference, probe)` → `f32` — information-theoretic novelty: mean `−log₂ P(next|prev)` of the probe's intervals under a model learned from `reference`
+
+### Embedding v2 (`embedding_v2` module)
+Principled comparison in a standardized space (see [Embedding v2](#embedding-v2-shipped-in-02)).
+- `Standardizer::fit(&[MusicEmbedding])` / `fit_from_phrases(&[Phrase])` — fit per-dimension mean/std
+- `Standardizer::apply(&MusicEmbedding)` / `MusicEmbedding::standardized(&z)` — z-score into the whitened space
+- `Standardizer::similarity(a, b)` — the recommended cosine, computed after whitening
 
 ### The meta layer (`meta` module)
 An abstraction approximator — a phrase as the *spline it traces through
@@ -394,13 +401,23 @@ remaining pure-Rust and dependency-free:
 - **Interval edit distance** — melodic similarity via string edit distance; cf.
   recent melody-similarity work such as *MelodySim* (2025).
 
-**Known roadmap (deliberately deferred, to stay additive):** the raw 32-dim
-embedding mixes features of different scales, so cosine can over-weight the
-higher-variance dimensions. Per-dimension standardization (z-scoring against a
-corpus) and an information-theoretic novelty metric (transition surprisal, i.e.
-−log P of observed interval transitions) are the next principled steps; they
-change core similarity semantics, so they belong in their own revision rather
-than bolted onto the current vector.
+**Embedding v2 (shipped in 0.2):** the raw 32-dim embedding mixes features of
+different scales, so plain cosine can over-weight the higher-variance dimensions.
+The two principled fixes are now in the crate, additively (v1 similarity is
+unchanged, so nothing downstream breaks):
+
+- **Per-dimension standardization** — [`embedding_v2::Standardizer`](src/embedding_v2.rs)
+  fits per-dimension mean/std over a corpus and compares in the whitened space, so
+  every dimension contributes on equal footing. `Standardizer::fit_from_phrases`
+  then `.similarity(a, b)`.
+- **Information-theoretic novelty** — [`analysis::transition_surprisal`](src/analysis.rs)
+  scores a probe by the mean `−log₂ P(next interval | prev interval)` under a
+  smoothed model learned from a reference corpus — expectation-violation novelty,
+  the cognitively-grounded alternative to `1 − cosine`.
+
+Still open: reshaping *which* 32 features the vector holds (folding contour/chroma
+in place of some raw intervals) is a genuinely breaking change and remains future
+work.
 
 ## Fleet & related work
 

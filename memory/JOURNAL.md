@@ -139,3 +139,26 @@ runs.
 **Status:** Operational — tests 65 + 2 doctests green, clippy clean, fmt clean.
 **Next duty:** arc-length reparameterization of the spline; and still, the
 embedding v2 that the meta layer would ride on top of.
+
+## Seventh Watch — Embedding v2 (principled comparison)
+
+**Date:** 2026-09-19
+
+Shipped the two principled fixes the scout flagged, additively (v1 unchanged),
+and bumped to **0.2.0**:
+- [`embedding_v2::Standardizer`](../src/embedding_v2.rs) — fits per-dimension
+  mean/std over a corpus and compares in the whitened space, so no single
+  high-variance dimension dominates cosine (a test proves raw cosine reads two
+  vectors as ~identical while the standardized comparison sees the quiet signal).
+- [`analysis::transition_surprisal`](../src/analysis.rs) — information-theoretic
+  novelty: mean `−log₂ P(next|prev)` of a probe's intervals under a Laplace-smoothed
+  model learned from a reference corpus; the expectation-violation alternative to
+  `1 − cosine`.
+
+5 new tests. README's "roadmap" note became an "Embedding v2 (shipped in 0.2)"
+section; API reference updated. Reshaping *which* 32 features the vector holds is
+the one remaining (breaking) step, left as future work.
+
+**Status:** Operational — tests 70 + 3 doctests green, clippy clean, fmt clean, v0.2.0.
+**Next duty:** carry the abstraction-approximator framing to tensor-midi (a JS
+sibling); arc-length reparameterization of the meta spline.

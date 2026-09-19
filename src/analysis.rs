@@ -236,6 +236,53 @@ fn levenshtein(a: &[i8], b: &[i8]) -> usize {
     prev[b.len()]
 }
 
+/// Interval bucket count: intervals clamped to [-12, 12] semitones → 25 classes.
+const N_BUCKETS: usize = 25;
+
+fn interval_bucket(i: i8) -> usize {
+    (i.clamp(-12, 12) as i32 + 12) as usize
+}
+
+/// Information-theoretic novelty: the mean per-transition **surprisal** of a
+/// probe phrase's melodic intervals under a transition model learned from a
+/// reference corpus.
+///
+/// Builds a first-order model `P(next_interval | prev_interval)` from `reference`
+/// (with Laplace/add-one smoothing over 25 interval buckets), then returns the
+/// average of `-log2 P(next | prev)` over the probe's consecutive interval pairs.
+/// Higher = the probe's moves are less expected given the corpus. This is the
+/// cheap, cognitively-grounded alternative to `1 - cosine` the scout recommended
+/// (cf. Sioros/Guedes; expectation-violation models of musical novelty).
+///
+/// Returns 0.0 for a probe with fewer than two intervals (nothing to predict).
+/// With an empty reference the model is uniform, so every transition scores
+/// `log2(25) ≈ 4.64` bits.
+pub fn transition_surprisal(reference: &[Phrase], probe: &Phrase) -> f32 {
+    // counts[prev][next], Laplace-smoothed.
+    let mut counts = vec![[1u32; N_BUCKETS]; N_BUCKETS];
+    for phrase in reference {
+        let iv = phrase.intervals();
+        for w in iv.windows(2) {
+            counts[interval_bucket(w[0])][interval_bucket(w[1])] += 1;
+        }
+    }
+    let probe_iv = probe.intervals();
+    if probe_iv.len() < 2 {
+        return 0.0;
+    }
+    let mut total = 0.0f32;
+    let mut n = 0u32;
+    for w in probe_iv.windows(2) {
+        let prev = interval_bucket(w[0]);
+        let next = interval_bucket(w[1]);
+        let row_sum: u32 = counts[prev].iter().sum();
+        let p = counts[prev][next] as f32 / row_sum as f32;
+        total += -p.log2();
+        n += 1;
+    }
+    total / n as f32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,6 +408,24 @@ mod tests {
         };
         assert!(off.syncopation() >= on.syncopation());
         assert_eq!(ph(&[60]).syncopation(), 0.0);
+    }
+
+    #[test]
+    fn transition_surprisal_rewards_the_expected() {
+        // A corpus of steady rising steps: intervals are all +2.
+        let corpus = vec![ph(&[60, 62, 64, 66, 68]), ph(&[50, 52, 54, 56, 58])];
+        // A probe that continues the +2 habit should be LESS surprising than one
+        // that leaps around unexpectedly.
+        let expected = ph(&[70, 72, 74, 76]); // +2, +2, +2
+        let surprising = ph(&[70, 58, 79, 55]); // wild leaps
+        let se = transition_surprisal(&corpus, &expected);
+        let ss = transition_surprisal(&corpus, &surprising);
+        assert!(ss > se, "unexpected moves score higher: {ss} > {se}");
+        // Fewer than two intervals → nothing to predict.
+        assert_eq!(transition_surprisal(&corpus, &ph(&[60])), 0.0);
+        // Empty reference → uniform model, ~log2(25) bits per transition.
+        let uni = transition_surprisal(&[], &expected);
+        assert!((uni - (N_BUCKETS as f32).log2()).abs() < 1e-4);
     }
 
     #[test]
